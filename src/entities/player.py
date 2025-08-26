@@ -45,6 +45,11 @@ class Player(GameObject):
         self.max_health = PLAYER_MAX_HEALTH
         self.is_alive = True
 
+        # 重生系統
+        self.last_safe_x = x  # 上一個安全位置的x
+        self.last_safe_y = y  # 上一個安全位置的y
+        self.safe_position_timer = 0  # 安全位置更新計時器
+
         # 戰鬥相關屬性
         self.current_bullet_type = "water"  # 當前子彈類型
         self.last_shot_time = 0  # 上次射擊時間
@@ -62,6 +67,9 @@ class Player(GameObject):
             "shoot": False,
             "melee": False,
         }
+
+        # 射擊請求佇列
+        self.pending_bullet = None
 
     def handle_input(self, keys, mouse_buttons):
         """
@@ -82,7 +90,7 @@ class Player(GameObject):
         self.keys_pressed["right"] = keys[pygame.K_d] or keys[pygame.K_RIGHT]
 
         # 跳躍輸入（W 鍵或空白鍵）
-        jump_input = keys[pygame.K_w] or keys[pygame.K_SPACE]
+        jump_input = keys[pygame.K_w] or keys[pygame.K_UP] or keys[pygame.K_SPACE]
         if jump_input and not self.keys_pressed["jump"]:
             # 按鍵從沒按下變成按下，觸發跳躍
             self.jump()
@@ -90,7 +98,9 @@ class Player(GameObject):
 
         # 射擊輸入（滑鼠左鍵）
         if mouse_buttons[0] and not self.keys_pressed["shoot"]:
-            self.shoot()
+            bullet_info = self.shoot()
+            if bullet_info:
+                self.pending_bullet = bullet_info
         self.keys_pressed["shoot"] = mouse_buttons[0]
 
         # 近戰攻擊（滑鼠右鍵）
@@ -244,6 +254,7 @@ class Player(GameObject):
         2. 應用重力和移動\n
         3. 碰撞檢測和處理\n
         4. 邊界檢查\n
+        5. 更新安全位置\n
         """
         # 更新狀態效果
         self.update_status_effects()
@@ -279,9 +290,30 @@ class Player(GameObject):
         # 更新碰撞矩形
         self.update_rect()
 
-        # 檢查是否掉出螢幕（遊戲結束條件）
-        if self.y > SCREEN_HEIGHT + 100:
-            self.take_damage(self.health)  # 直接死亡
+        # 更新安全位置（如果玩家在地面上且位置合理）
+        if self.on_ground and self.y < SCREEN_HEIGHT - 100:
+            self.safe_position_timer += 1
+            # 每60幀（1秒）更新一次安全位置
+            if self.safe_position_timer >= 60:
+                self.last_safe_x = self.x
+                self.last_safe_y = self.y
+                self.safe_position_timer = 0
+
+        # 檢查是否掉出螢幕（需要重生）
+        if self.y > SCREEN_HEIGHT + 200:
+            self.respawn()
+
+    def respawn(self):
+        """
+        重生玩家到上一個安全位置\n
+        """
+        self.x = self.last_safe_x
+        self.y = self.last_safe_y
+        self.velocity_x = 0
+        self.velocity_y = 0
+        self.health = self.max_health  # 重生時恢復滿血
+        self.is_alive = True
+        print(f"🔄 玩家重生到位置: ({int(self.x)}, {int(self.y)})")
 
     def handle_collisions(self, platforms):
         """
@@ -413,6 +445,17 @@ class Player(GameObject):
             return True  # 玩家死亡
         return False  # 玩家還活著
 
+    def get_pending_bullet(self):
+        """
+        取得待發射的子彈並清除
+
+        回傳:
+        dict or None: 子彈資訊或 None
+        """
+        bullet_info = self.pending_bullet
+        self.pending_bullet = None
+        return bullet_info
+
     def heal(self, amount):
         """
         恢復生命值\n
@@ -479,10 +522,7 @@ class Player(GameObject):
 
         pygame.draw.polygon(screen, WHITE, triangle_points)
 
-        # 如果在滑牆，繪製特殊效果
-        if self.is_wall_sliding:
-            # 在玩家周圍畫一圈白色邊框表示滑牆狀態
-            pygame.draw.rect(screen, WHITE, self.rect, 2)
+        # 移除滑牆特殊效果的白色邊框
 
     def draw_health_bar(self, screen):
         """
@@ -544,11 +584,9 @@ class Player(GameObject):
             ui_rect = pygame.Rect(ui_x, ui_y, BULLET_UI_SIZE, BULLET_UI_SIZE)
             pygame.draw.rect(screen, bullet_colors[bullet_type], ui_rect)
 
-            # 如果是當前選中的子彈類型，畫白色邊框
+            # 如果是當前選中的子彈類型，畫更粗的白色邊框
             if bullet_type == self.current_bullet_type:
-                pygame.draw.rect(screen, WHITE, ui_rect, 3)
-            else:
-                pygame.draw.rect(screen, GRAY, ui_rect, 1)
+                pygame.draw.rect(screen, WHITE, ui_rect, 4)
 
             # 繪製按鍵提示
             font = get_chinese_font(FONT_SIZE_SMALL)

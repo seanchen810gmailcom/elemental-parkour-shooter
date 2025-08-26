@@ -4,453 +4,94 @@
 
 這是一個結合跑酷動作和射擊元素的 2D 遊戲，使用 Python 和 Pygame 開發。## 🎮 遊戲特色
 
-## 遊戲特色### 核心玩法
+# 跑酷射擊大冒險 — Elemental Parkour Shooter
 
-- 🏃‍♂️ **流暢跑酷系統**：雙跳、爬牆、滑牆等動作- **跑酷 + 射擊**：邊進行跑酷動作（跳躍、爬牆、雙跳）邊對抗怪物
+這是一個使用 Python 和 Pygame 開發的 2D 跑酷射擊遊戲，結合流暢的跑酷動作與元素屬性的戰鬥系統。
 
-- 🎯 **多元素戰鬥**：水、冰、雷、火四種子彈類型- **元素屬性系統**：四種子彈類型，每種都有獨特的剋制關係
+## 專案重點
 
-- 👾 **豐富敵人系統**：岩漿怪、水怪、龍捲風怪等- **多樣化怪物**：三種不同類型的怪物，各有特殊攻擊模式
+- 流暢的跑酷動作（雙跳、牆面互動）
+- 即時射擊系統：四種元素子彈（水、冰、雷、火）
+- 元素剋制系統：根據敵人類型產生額外效果
+- 模組化程式碼結構，易於擴充與維護
 
-- 🏰 **多主題關卡**：火山、海底、颶風三大場景- **波次挑戰**：隨著遊戲進行，敵人變得更強更多
+## 目前功能（概要）
 
-- 👹 **挑戰性 Boss 戰**：每關都有獨特的 Boss 敵人
-
-### 玩家能力
-
-## 檔案結構
-
-- **移動系統**：WASD 或方向鍵控制移動
-
-```- **跑酷技能**：
-
-elemental-parkour-shooter/  - 跳躍和二段跳
-
-├── src/                     # 核心程式碼  - 爬牆和滑牆
-
-│   ├── main.py             # 主程式入口  - 牆面跳躍
-
-│   ├── config.py           # 遊戲設定- **戰鬥系統**：
-
-│   ├── core/               # 核心遊戲邏輯  - 遠距離射擊（滑鼠左鍵）
-
-│   │   ├── game_objects.py # 基礎遊戲物件  - 近距離近戰攻擊（滑鼠右鍵）
-
-│   │   └── element_system.py # 元素系統
-
-│   ├── entities/           # 遊戲實體## 🔥 元素屬性系統
-
-│   │   ├── player.py       # 玩家角色
-
-│   │   ├── monsters.py     # 怪物系統### 子彈類型
-
-│   │   └── weapon.py       # 武器系統
-
-│   ├── systems/            # 遊戲系統1. **水彈（1 鍵）**：對岩漿怪造成雙倍傷害
-
-│   │   ├── level_system.py # 關卡系統2. **冰彈（2 鍵）**：造成減速效果，對龍捲風怪特別有效
-
-│   │   ├── boss_system.py  # Boss系統3. **雷彈（3 鍵）**：對水怪造成雙倍傷害和麻痺效果
-
-│   │   ├── monster_manager.py # 怪物管理器4. **火彈（4 鍵）**：高傷害，但對岩漿怪有抗性
-
-│   │   └── damage_display.py # 傷害顯示
-
-│   └── utils/              # 工具函數### 屬性剋制關係
-
-├── docs/                   # 文檔
-
-│   ├── GAME_GUIDE.md       # 遊戲指南- 水 → 剋制岩漿怪
-
-│   └── README.md           # 專案說明- 雷 → 剋制水怪
-
-├── scripts/                # 執行腳本- 冰 → 對所有敵人造成減速
-
-│   └── start_game.sh       # 啟動腳本- 火 → 對水怪有效，對岩漿怪抗性
-
-├── main.py                 # 主程式入口
-
-└── requirements.txt        # 依賴套件清單## 👾 怪物類型
-
-```
-
-### 1. 岩漿怪（紅色）
+- 玩家移動與跳躍
+- 子彈類型切換（鍵盤 1-4）
+- 多種怪物類型（岩漿怪、水怪、龍捲風怪）
+- 怪物 AI 與波次管理
+- 傷害數字顯示（Damage Display）
 
 ## 系統需求
 
-- **特點**：防禦力高，血量多
+- Python 3.8+
+- pygame >= 2.5.0
 
-- Python 3.8 或更高版本- **攻擊**：近戰 + 熔岩球遠程攻擊
+## 安裝
 
-- Pygame 2.5.0 或更高版本- **弱點**：水屬性攻擊
-
-- **抗性**：火屬性攻擊
-
-## 安裝與執行
-
-### 2. 水怪（藍色）
-
-### 方法一：使用啟動腳本（推薦）
-
-- **特點**：移動速度快，靈活
-
-````bash- **攻擊**：近戰 + 水彈散射 + 衝刺
-
-# 給予執行權限- **弱點**：雷屬性和火屬性攻擊
-
-chmod +x scripts/start_game.sh- **特殊**：能發射多發水彈進行範圍攻擊
-
-
-
-# 執行遊戲### 3. 龍捲風怪（灰色）
-
-./scripts/start_game.sh
-
-```- **特點**：速度極快，血量較低
-
-- **攻擊**：近戰 + 旋風推開 + 瞬移
-
-### 方法二：手動安裝與執行- **弱點**：冰屬性攻擊（強力減速）
-
-- **特殊**：能瞬移到玩家附近
+建議建立虛擬環境並安裝相依套件：
 
 ```bash
-
-# 安裝依賴## 🎯 遊戲操作
-
-pip3 install -r requirements.txt
-
-### 基本控制
-
-# 方式1：直接執行主程式
-
-python3 main.py- **移動**：A/D 鍵或左右方向鍵
-
-- **跳躍**：W 鍵或空白鍵或上方向鍵
-
-# 方式2：以模組方式執行- **射擊**：滑鼠左鍵
-
-python3 -m src.main- **近戰**：滑鼠右鍵
-
-````
-
-### 子彈切換
-
-## 遊戲操作
-
-- **1 鍵**：水彈
-
-- **WASD** 或 **方向鍵**：移動和跳躍- **2 鍵**：冰彈
-
-- **滑鼠左鍵**：射擊- **3 鍵**：雷彈
-
-- **滑鼠右鍵**：近戰攻擊- **4 鍵**：火彈
-
-- **1234 鍵**：切換子彈類型
-
-- **空白鍵**：暫停/繼續遊戲### 系統控制
-
-- **ESC 鍵**：離開遊戲
-
-- **ESC**：離開遊戲
-
-## 開發指南
-
-## 🏆 遊戲目標
-
-### 程式碼風格
-
-- 在不斷增強的怪物波次中生存
-
-請參閱 `.github/instructions/info.instructions.md` 中的詳細程式碼風格指南。- 善用屬性剋制系統對抗不同類型的敵人
-
-- 獲得高分並挑戰更高的波次
-
-重點原則：- 掌握跑酷技巧在戰鬥中保持優勢
-
-- 使用 snake_case 命名變數和函數
-
-- 使用 PascalCase 命名類別## 📊 計分系統
-
-- 所有註解使用繁體中文
-
-- 詳細的函數文檔字串- **子彈擊中**：10 分
-
-- **近戰擊中**：20 分
-
-### 模組說明- **擊殺怪物**：50 分
-
-- **完成波次**：200 分
-
-- **core**：包含基礎遊戲物件和元素系統
-
-- **entities**：包含玩家、怪物、武器等遊戲實體## 🛠️ 技術實作
-
-- **systems**：包含關卡、Boss、怪物管理等遊戲系統
-
-- **utils**：包含工具函數和輔助功能### 檔案結構
-
-## 授權```
-
-├── main.py # 主遊戲檔案
-
-此專案採用開放原始碼授權。├── config.py # 遊戲設定和常數
-├── player.py # 玩家角色系統
-├── weapon.py # 武器和子彈系統
-├── monsters.py # 怪物類別定義
-├── monster_manager.py # 怪物管理器
-├── game_objects.py # 基礎遊戲物件
-├── element_system.py # 屬性剋制系統
-├── damage_display.py # 傷害數字顯示
-└── README.md # 說明文件
-
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### 系統架構
+## 運行遊戲
 
-- **物件導向設計**：清晰的類別繼承結構
-- **模組化開發**：各系統獨立且易於維護
-- **狀態管理**：完整的遊戲狀態和 AI 狀態機
-- **效果系統**：狀態效果和屬性剋制計算
+推薦使用專案提供的腳本或模組方式啟動：
 
-## 🚀 運行需求
+```bash
+# 使用啟動腳本 (會做一些預檢查)
+./scripts/start_game.sh
 
-### 系統需求
+# 或以模組方式執行
+python3 -m src.main
 
-- Python 3.7+
-- pygame 2.0+
+# 或直接執行 (開發或快速測試)
+python3 main.py
+```
 
-### 安裝步驟
+## 基本操作
 
-1. 確保已安裝 Python
-2. 安裝 pygame：`pip install pygame`
-3. 運行遊戲：`python main.py`
+- 移動：A / D 或 左 / 右
+- 跳躍：W / 空白 / 上
+- 子彈切換：1（水） 2（冰） 3（雷） 4（火）
+- 射擊：滑鼠左鍵
+- 近戰：滑鼠右鍵
+- 暫停/繼續：空白鍵
+- 退出：ESC
 
-## 🎨 視覺特效
+## 檔案結構 (重點)
 
-- **即時傷害數字**：顯示造成的傷害和效果類型
-- **屬性剋制指示**：不同顏色表示弱點/抗性攻擊
-- **狀態效果視覺**：怪物受到狀態效果時的顏色變化
-- **動態 UI**：即時顯示遊戲狀態和統計資訊
+```
+src/
+├── main.py            # 主遊戲迴圈與狀態管理
+├── config.py          # 全域常數與參數
+├── core/              # 核心系統 (元素、基礎物件)
+├── entities/          # 玩家、怪物、武器等實體
+└── systems/           # 關卡、怪物管理、Boss 等管理器
+```
 
-## 🔄 未來擴展
+## 元素剋制（簡要）
 
-遊戲採用模組化設計，未來可以輕鬆加入：
+- 水 → 對岩漿怪造成額外傷害
+- 雷 → 對水怪造成額外傷害並可能麻痺
+- 冰 → 對某些敵人造成減速效果
+- 火 → 對水怪有效，但對岩漿怪可能減傷
 
-- Boss 戰系統
-- 不同場景和環境
-- 更多武器類型
-- 道具和升級系統
-- 多人遊戲模式
+元素平衡的定義集中在 `src/core/element_system.py`。
+
+## 開發者注意事項
+
+- 遵循專案的程式碼風格：變數使用 snake_case，類別使用 PascalCase，且所有註解與文檔字串使用繁體中文。
+- 若新增或調整屬性剋制，請修改 `ElementSystem`，不要散佈多處邏輯。
+
+## 貢獻
+
+歡迎提交 PR 與 issue。請先閱讀專案中的開發說明與風格指南。
 
 ---
 
-享受這個結合策略思考與反應速度的跑酷射擊冒險吧！記住善用屬性剋制，這是獲勝的關鍵！
-
-## 👾 Monster Types
-
-### 1. 🌋 Lava Monster
-
-- **Strengths**: High defense, shoots molten lava balls creating fire zones
-- **Weakness**: Vulnerable to water-based attacks
-- **Behavior**: Slow but tanky, creates area denial with lava pools
-
-### 2. 🌊 Water Monster
-
-- **Strengths**: High mobility, rapid swimming, wide-range water projectiles
-- **Weakness**: Takes heavy damage from electric and fire attacks
-- **Behavior**: Fast and agile, uses hit-and-run tactics
-
-### 3. 🌪️ Tornado Monster
-
-- **Strengths**: Extreme speed, can pull players and cause displacement
-- **Weakness**: Low health, disperses quickly when hit
-- **Behavior**: High damage but fragile, creates chaos with wind attacks
-
-## 🔫 Weapon System
-
-Players wield a single adaptive firearm with **dual combat modes**:
-
-### Ranged Mode
-
-- Fires elemental bullets with different properties
-- Effective for medium to long-range combat
-- Bullet types can be switched based on enemy weaknesses
-
-### Melee Mode
-
-- Close-quarters combat using the gun as a weapon
-- Knockback effect to push away enemies
-- Quick escape option when overwhelmed
-
-## 💥 Elemental Ammunition System
-
-### Bullet Types & Effects
-
-| Bullet Type         | Icon | Effective Against | Special Properties                |
-| ------------------- | ---- | ----------------- | --------------------------------- |
-| **Water Bullets**   | 💧   | Lava Monsters     | High damage to fire enemies       |
-| **Ice Bullets**     | ❄️   | Tornado Monsters  | Slowing effect                    |
-| **Thunder Bullets** | ⚡   | Water Monsters    | Paralysis effect                  |
-| **Fire Bullets**    | 🔥   | Water Monsters    | Ineffective against Lava Monsters |
-
-### Ammunition Acquisition
-
-- Collect power-ups scattered throughout levels
-- Upgrade stations at checkpoints
-- Rare drops from defeated monsters
-- Strategic resource management required
-
-## 👑 Boss Design
-
-### Elemental Fusion Bosses
-
-#### 🌋🌪️ Molten Tornado Beast
-
-- **Abilities**: Spinning fire attacks, lava tornadoes
-- **Strategy**: Requires alternating ice and water bullets
-- **Phases**: Multiple attack patterns as health decreases
-
-#### 🌊⚡ Tsunami Leviathan
-
-- **Abilities**: Massive water waves, electric storm attacks
-- **Strategy**: Use fire bullets during water phase, earth attacks during electric phase
-- **Environment**: Dynamic arena with changing water levels
-
-### Boss Battle Mechanics
-
-- Multi-phase encounters
-- Requires mastery of all bullet types
-- Environmental hazards and interactive elements
-- Adaptive difficulty based on player performance
-
-## 🎮 Level Design & Environments
-
-### 1. 🌋 Volcanic Caverns
-
-- **Hazards**: Lava pits, falling rocks, steam geysers
-- **Enemies**: Primarily Lava Monsters
-- **Mechanics**: Heat-based platforming challenges
-
-### 2. 🌊 Underwater Tunnels
-
-- **Hazards**: Drowning zones, water currents, pressure chambers
-- **Enemies**: Water Monsters and hybrid creatures
-- **Mechanics**: Oxygen management, underwater physics
-
-### 3. 🌪️ Hurricane Canyon
-
-- **Hazards**: Wind gusts, floating debris, unstable platforms
-- **Enemies**: Tornado Monsters, flying creatures
-- **Mechanics**: Wind-affected jumping, aerial combat
-
-## 🎯 Key Features
-
-1. **🏃 Dynamic Parkour System**
-
-   - Fluid movement mechanics
-   - Wall running, double jumping, sliding
-   - Environmental traversal challenges
-
-2. **⚔️ Strategic Combat**
-
-   - Rock-paper-scissors elemental system
-   - Real-time bullet switching
-   - Risk/reward weapon positioning
-
-3. **🎨 Adaptive Weapon Design**
-
-   - Single weapon, multiple functions
-   - Seamless mode switching
-   - Upgradeable components
-
-4. **🌍 Diverse Environments**
-
-   - Multiple themed levels
-   - Unique environmental challenges
-   - Interactive destructible elements
-
-5. **�� Immersive Experience**
-   - Dynamic soundtrack responding to action
-   - Particle effects and visual feedback
-   - Responsive UI and controls
-
-## 🚀 Development Roadmap
-
-### Phase 1: Core Mechanics
-
-- [ ] Basic parkour movement system
-- [ ] Weapon switching mechanics
-- [ ] Elementary enemy AI
-
-### Phase 2: Combat System
-
-- [ ] Elemental damage system
-- [ ] Monster behavior patterns
-- [ ] Ammunition management
-
-### Phase 3: Level Design
-
-- [ ] Environment creation tools
-- [ ] Hazard implementation
-- [ ] Checkpoint system
-
-### Phase 4: Boss Battles
-
-- [ ] Boss AI development
-- [ ] Multi-phase encounter design
-- [ ] Cinematic sequences
-
-### Phase 5: Polish & Optimization
-
-- [ ] Performance optimization
-- [ ] Audio implementation
-- [ ] UI/UX refinement
-
-## 🛠️ Technical Requirements
-
-### Minimum System Requirements
-
-- **OS**: Windows 10 / macOS 10.14 / Ubuntu 18.04
-- **Processor**: Intel i5-6600K / AMD Ryzen 5 2600
-- **Memory**: 8 GB RAM
-- **Graphics**: GTX 1060 / RX 580
-- **Storage**: 5 GB available space
-
-### Recommended System Requirements
-
-- **OS**: Windows 11 / macOS 12.0 / Ubuntu 20.04
-- **Processor**: Intel i7-9700K / AMD Ryzen 7 3700X
-- **Memory**: 16 GB RAM
-- **Graphics**: RTX 3060 / RX 6600 XT
-- **Storage**: 10 GB available space (SSD recommended)
-
-## 🤝 Contributing
-
-We welcome contributions from the community! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
-
-### Areas for Contribution
-
-- Level design and environmental art
-- Monster behavior scripting
-- UI/UX improvements
-- Performance optimization
-- Bug fixes and testing
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 📞 Contact
-
-- **Project Lead**: [Your Name]
-- **Email**: [your.email@example.com]
-- **Discord**: [Discord Server Link]
-- **Twitter**: [@YourTwitterHandle]
-
----
-
-⭐ **Star this repository if you're excited about Elemental Parkour Shooter!** ⭐
-
-_Last updated: August 26, 2025_
-```
+最後更新：2025-08-26

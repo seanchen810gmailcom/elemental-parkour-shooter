@@ -24,174 +24,86 @@ src/
 
 遊戲使用多個專用管理器來處理複雜系統：
 
-- **`MonsterManager`**: 怪物生成、波次推進、難度調整
-- **`WeaponManager`**: 子彈系統、碰撞檢測、近戰攻擊
-- **`LevelManager`**: 關卡場景、陷阱、主題切換
-- **`BossManager`**: Boss 戰鬥邏輯和多階段機制
-- **`DamageDisplayManager`**: 傷害數字和狀態效果顯示
+# AI Coding Agent Instructions for Elemental Parkour Shooter
 
-**注意**: 每個管理器都有自己的 `update()` 方法，按特定順序在主迴圈中調用。
+## 概要
 
-### 3. 元素屬性系統核心
+這份說明提供給自動化程式碼助理（AI coding agent），用來在此 Pygame 專案中實作或變更功能時遵循的架構、風格與流程要點。主要關注模組化結構、元素屬性系統，以及常見開發任務與測試流程。
 
-```python
-# core/element_system.py - 所有屬性邏輯的中央處理
-ElementSystem.calculate_damage(base_damage, attacker_element, target_type)
-ElementSystem.get_status_effect(attacker_element, target_type)
+> 參考：專案的詳細風格與註解規範請見 `.github/instructions/info.instructions.md`（包含註解範例、文檔字串格式與命名規範）。
+
+## 主要架構
+
+專案採模組化設計：
+
+```
+src/
+├── main.py      # 主遊戲迴圈、狀態管理
+├── config.py    # 全域常數
+├── core/        # 元素系統、基礎遊戲物件
+├── entities/    # 玩家、怪物、武器
+└── systems/     # 關卡、怪物管理、Boss
 ```
 
-**剋制關係**:
+每個系統以管理器（Manager）模式實作，常見管理器：`MonsterManager`、`WeaponManager`、`LevelManager`、`BossManager`、`DamageDisplayManager`。每個管理器應提供 `update()` 方法，並在主迴圈以固定順序呼叫。
 
-- 水 → 岩漿怪 (2x 傷害)
-- 雷 → 水怪 (2x 傷害 + 麻痺)
-- 冰 → 龍捲風怪 (強力減速)
-- 火 → 水怪有效，對岩漿怪抗性
+## 元素屬性系統
 
-**重要**: 修改屬性平衡時，只需在 `ElementSystem` 中調整，不要分散在多個文件中。
+所有元素相關邏輯集中於 `src/core/element_system.py`：
 
-## 開發工作流程
+- ElementSystem.calculate_damage(base_damage, attacker_element, target)
+- ElementSystem.get_status_effect(attacker_element, target)
 
-### 運行遊戲
+範例剋制關係（可在 ElementSystem 調整）：
 
-```bash
-# 推薦方式（自動依賴檢查）
-./scripts/start_game.sh
+- 水 → 岩漿怪（2x 傷害）
+- 雷 → 水怪（2x 傷害 + 麻痺）
+- 冰 → 龍捲風怪（強力減速）
+- 火 → 對水怪有效，對岩漿怪可能抗性
 
-# 開發模式
-python3 -m src.main
+重要：不要在多處複製屬性判定邏輯，所有平衡改動應集中在 ElementSystem。
 
-# 直接執行
-python3 main.py
-```
+## 程式碼風格與測試
 
-### 依賴管理
+- 命名：變數/函式為 snake_case，類別為 PascalCase。
+- 註解與文件：使用繁體中文；public 方法需有完整 docstring（參數、回傳、範例）。
+- 開發流程：更新後執行 linters/測試與簡單運行測試（例如呼叫 `python3 -m src.main` 的一個小場景）。
 
-- **核心依賴**: `pygame>=2.5.0`
-- **安裝**: `pip3 install -r requirements.txt`
-- **字體系統**: 自動降級到系統可用的中文字體
-
-### 程式碼風格要求
-
-**必須遵循**: 參考 `.github/instructions/info.instructions.md`
-
-**關鍵規則**:
-
-1. **變數命名**: `snake_case` (例: `monster_manager`, `bullet_speed`)
-2. **類別命名**: `PascalCase` (例: `ElementSystem`, `MonsterManager`)
-3. **註解語言**: 所有註解使用**繁體中文**
-4. **文檔字串**: 必須包含參數說明、回傳值、使用範例
-
-**註解風格範例**:
+舉例 docstring 範本（請遵循 `.github/instructions/info.instructions.md` 的格式）：
 
 ```python
 def calculate_damage(self, base_damage, attacker_element, target_type):
     """
-    計算考慮屬性剋制後的最終傷害\n
-    \n
-    參數:\n
-    base_damage (int): 基礎傷害值，範圍 > 0\n
-    attacker_element (str): 攻擊者的元素屬性\n
-    target_type (str): 目標的怪物類型\n
-    \n
-    回傳:\n
-    int: 最終傷害值，最小為1\n
+    計算考慮屬性剋制後的最終傷害
+
+    參數:
+    base_damage (int): 基礎傷害
+    attacker_element (str): 攻擊元素
+    target_type (str): 目標類型
+
+    回傳:
+    int: 經過剋制後的最終傷害（最小為 1）
     """
-    # 檢查弱點攻擊（對特定怪物造成雙倍傷害）
-    if attacker_element in self.WEAKNESS_MAP:
-        if target_type in self.WEAKNESS_MAP[attacker_element]:
-            final_damage = int(base_damage * WEAKNESS_MULTIPLIER)
+    ...
 ```
 
-## 重要設計模式
+## 常見任務指引
 
-### 1. 狀態機 AI
+- 新增怪物：在 `entities/monsters.py` 繼承 `Monster`，更新 `config.py`、在 `ElementSystem` 定義弱點，並把生成邏輯加到 `MonsterManager`。
+- 新增子彈類型：擴充 `entities/weapon.py` 的 `Bullet`，在 `config.py` 設定參數，並在 ElementSystem 加入剋制關係。
+- 關卡：在 `systems/level_system.py` 新增 `generate_*_level()`。
 
-怪物使用狀態機： `'patrol'` → `'chase'` → `'attack'` → `'stunned'`
+## 調試要點
 
-```python
-# monsters.py - AI 狀態機實現
-def update_ai(self, player, platforms):
-    if can_attack:
-        self.ai_state = "attack"
-    elif player_detected:
-        self.ai_state = "chase"
-    else:
-        self.ai_state = "patrol"
-```
+- 若遇到模組導入錯誤，請用 `python3 -m src.main` 執行模組路徑。
+- 字體載入出錯會自動降級，檢查 console 輸出以確定使用的是哪個字體。
+- 碰撞或顯示問題常因 camera 偏移或 draw 座標未減攝影機偏移造成。
 
-### 2. 組件化更新循環
+## 交付與 PR 建議
 
-主遊戲迴圈按固定順序更新組件，確保數據流一致性：
+- 每次變更應包含：簡短的 PR 描述、修改的檔案列表、以及如何在本地重現變更的步驟。
+- 若變更涉及平衡（元素數值、怪物數值），請在 PR 中包含測試說明或數值範例。
 
-```python
-# main.py - 更新順序很重要
-def update(self):
-    self.player.update(platforms)
-    self.level_manager.update(dt, self.player, bullets)
-    self.monster_manager.update(self.player, platforms, dt)
-    self.weapon_manager.update(targets=all_targets)
-    self.damage_display.update()
-```
+---
 
-### 3. 攝影機系統
-
-使用相對座標系統，所有繪製方法接受 `camera_x`, `camera_y` 參數：
-
-```python
-def draw(self, screen, camera_x=0, camera_y=0):
-    # 所有位置都要減去攝影機偏移
-    draw_x = self.x - camera_x
-    draw_y = self.y - camera_y
-```
-
-## 常見開發任務
-
-### 添加新怪物類型
-
-1. 在 `entities/monsters.py` 中繼承 `Monster` 類別
-2. 在 `config.py` 中添加配置常數
-3. 在 `core/element_system.py` 中定義弱點關係
-4. 更新 `MonsterManager` 的生成邏輯
-
-### 添加新子彈類型
-
-1. 在 `entities/weapon.py` 中擴展 `Bullet` 類別
-2. 在 `config.py` 中定義傷害和顏色
-3. 在 `ElementSystem` 中添加剋制關係
-4. 更新玩家的切換 UI
-
-### 關卡設計
-
-1. 在 `systems/level_system.py` 中添加新的 `generate_*_level()` 方法
-2. 定義平台佈局、陷阱位置和主題顏色
-3. 更新 `LevelManager.generate_level()` 中的關卡切換邏輯
-
-## 調試和故障排除
-
-### 常見問題
-
-- **模組導入錯誤**: 確保使用 `python3 -m src.main` 運行
-- **字體載入失敗**: 系統會自動降級到預設字體，檢查控制台輸出
-- **碰撞檢測問題**: 檢查攝影機偏移是否正確應用
-- **性能問題**: 檢查怪物數量和子彈清理邏輯
-
-### 日誌和診斷
-
-遊戲在控制台輸出重要事件：
-
-- 字體載入狀態
-- 波次推進資訊
-- Boss 戰鬥狀態
-- 關卡切換通知
-
-## 擴展指南
-
-該項目設計為模組化擴展。添加新功能時：
-
-1. **確定適當的模組**：新功能屬於哪個系統？
-2. **遵循現有模式**：參考類似功能的實現方式
-3. **更新配置**：在 `config.py` 中添加相關常數
-4. **考慮平衡性**：新功能如何影響元素屬性系統？
-5. **測試互動**：確保與現有系統正確整合
-
-記住：這個遊戲的核心是元素屬性剋制系統，所有新功能都應該考慮如何與這個系統協調工作。
+保持簡潔、模組化、並集中處理元素邏輯；如需更詳細的註解格式與範例，參考 `.github/instructions/info.instructions.md`。

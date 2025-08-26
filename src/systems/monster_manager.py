@@ -33,42 +33,42 @@ class MonsterManager:
 
     def get_spawn_position(self, platforms):
         """
-        獲取安全的怪物生成位置\n
+        獲取安全的怪物生成位置（在較大的平台上）\n
         \n
         參數:\n
         platforms (list): 平台列表\n
         \n
         回傳:\n
-        tuple: (x, y) 座標，如果找不到安全位置回傳 None\n
+        tuple: (x, y, platform) 座標和平台物件，如果找不到安全位置回傳 None\n
         """
-        # 嘗試多次找到合適的生成位置
-        for _ in range(20):
-            # 隨機選擇螢幕邊緣的位置
-            if random.choice([True, False]):
-                # 從左右兩側生成
-                x = random.choice([0, SCREEN_WIDTH - 50])
-                y = random.randint(100, SCREEN_HEIGHT - 200)
-            else:
-                # 從上方生成
-                x = random.randint(50, SCREEN_WIDTH - 50)
-                y = 0
+        # 找出所有較大的平台（寬度大於100的平台）
+        large_platforms = [p for p in platforms if p.width >= 100]
 
-            # 檢查這個位置是否與平台重疊
-            test_rect = pygame.Rect(x, y, 50, 50)
-            collision = False
+        if not large_platforms:
+            return None
 
-            for platform in platforms:
-                if test_rect.colliderect(platform.rect):
-                    collision = True
-                    break
+        # 隨機選擇一個大平台
+        platform = random.choice(large_platforms)
 
-            if not collision:
-                return (x, y)
+        # 在平台上隨機選擇位置，確保怪物不會掉下去
+        margin = 30  # 距離平台邊緣的安全距離
+        monster_width = 50  # 怪物寬度
 
-        # 如果找不到合適位置，使用預設位置
-        return (SCREEN_WIDTH - 50, 100)
+        # 計算安全的生成範圍
+        min_x = int(platform.x + margin)
+        max_x = int(platform.x + platform.width - margin - monster_width)
 
-    def spawn_monster(self, platforms):
+        # 確保範圍有效
+        if max_x <= min_x:
+            # 如果平台太小，就在平台中央生成
+            spawn_x = int(platform.x + platform.width // 2)
+        else:
+            spawn_x = random.randint(min_x, max_x)
+        spawn_y = platform.y - 50  # 在平台上方生成
+
+        return (spawn_x, spawn_y, platform)
+
+    def spawn_monster(self, platforms, player):
         """
         生成新怪物\n
         \n
@@ -82,9 +82,11 @@ class MonsterManager:
             return None
 
         # 獲取生成位置
-        spawn_pos = self.get_spawn_position(platforms)
-        if spawn_pos is None:
+        spawn_result = self.get_spawn_position(platforms)
+        if spawn_result is None:
             return None
+
+        spawn_x, spawn_y, platform = spawn_result
 
         # 根據權重隨機選擇怪物類型
         monster_class = random.choices(self.monster_types, weights=self.spawn_weights)[
@@ -92,7 +94,10 @@ class MonsterManager:
         ]
 
         # 生成怪物
-        new_monster = monster_class(spawn_pos[0], spawn_pos[1])
+        new_monster = monster_class(spawn_x, spawn_y)
+
+        # 記錄怪物所在的平台，防止掉落
+        new_monster.home_platform = platform
 
         # 根據波次調整怪物屬性
         self.adjust_monster_stats(new_monster)
@@ -216,7 +221,7 @@ class MonsterManager:
         # 更新生成計時器並嘗試生成新怪物
         new_monster = None
         if self.update_spawn_timer(dt):
-            new_monster = self.spawn_monster(platforms)
+            new_monster = self.spawn_monster(platforms, player)
 
         return {
             "monsters_killed": killed_this_frame,

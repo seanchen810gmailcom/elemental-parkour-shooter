@@ -420,13 +420,13 @@ class WindGust(Hazard):
 
 class LevelManager:
     """
-    關卡管理器 - 控制不同場景的生成和管理\n
+    關卡管理器 - 控制跑酷平台的生成和管理\n
     \n
     負責:\n
-    1. 生成不同主題的關卡（火山、海底、颶風）\n
-    2. 管理平台和陷阱的配置\n
-    3. 控制關卡進度和切換\n
-    4. 提供關卡特定的環境效果\n
+    1. 生成30層高度的跑酷平台系統\n
+    2. 管理平台配置和目標星星\n
+    3. 提供安全的跑酷體驗\n
+    4. 無危險陷阱，專注跑酷樂趣\n
     """
 
     def __init__(self):
@@ -434,181 +434,134 @@ class LevelManager:
         初始化關卡管理器\n
         """
         self.current_level = 1
-        self.level_theme = "volcano"  # 可選: "volcano", "underwater", "hurricane"
+        self.level_theme = "parkour"  # 跑酷主題
         self.platforms = []
-        self.hazards = []
-        self.level_width = SCREEN_WIDTH * 3  # 關卡寬度是螢幕的3倍
-        self.level_height = SCREEN_HEIGHT
+        self.hazards = []  # 保留但不使用危險陷阱
+        self.level_width = SCREEN_WIDTH * 4  # 關卡寬度稍微增加
+        self.level_height = SCREEN_HEIGHT * 8  # 高度大幅增加，容納30層
+        self.total_levels = 30  # 總共30層
+        self.star_collected = False  # 星星是否被收集
+        self.star_x = 0  # 星星位置
+        self.star_y = 0
         self.generate_level()
 
     def generate_level(self):
         """
-        根據目前關卡主題生成對應的場景\n
+        生成30層跑酷平台系統\n
         """
         # 清除舊的場景物件
         self.platforms = []
-        self.hazards = []
+        self.hazards = []  # 不使用危險陷阱
 
-        # 根據關卡數決定主題
-        if self.current_level <= 3:
-            self.level_theme = "volcano"
-            self.generate_volcano_level()
-        elif self.current_level <= 6:
-            self.level_theme = "underwater"
-            self.generate_underwater_level()
-        else:
-            self.level_theme = "hurricane"
-            self.generate_hurricane_level()
+        # 生成30層跑酷平台
+        self.generate_parkour_platforms()
 
-    def generate_volcano_level(self):
+        # 在最高層放置目標星星
+        self.place_target_star()
+
+    def generate_parkour_platforms(self):
         """
-        生成火山主題關卡\n
+        生成30層跑酷平台系統\n
         \n
         特色:\n
-        - 熔岩池陷阱\n
-        - 岩石平台\n
-        - 高溫環境效果\n
+        - 每層都有安全的落腳點\n
+        - 平台大小和間距適合跑酷\n
+        - 從底部到頂部逐漸提升挑戰\n
+        - 沒有會讓玩家死亡的陷阱\n
         """
-        # 生成基礎平台
-        platform_y = SCREEN_HEIGHT - 100
-        for i in range(0, self.level_width, 200):
-            # 隨機平台高度變化
-            height_variation = random.randint(-50, 50)
-            platform_width = random.randint(120, 180)
+        # 生成地面（第0層）
+        ground_platform = Platform(0, SCREEN_HEIGHT - 40, self.level_width, 40)
+        self.platforms.append(ground_platform)
 
-            platform = Platform(i, platform_y + height_variation, platform_width, 20)
-            self.platforms.append(platform)
+        # 每層平台的基本設定
+        platforms_per_level = 4  # 每層4個平台
+        level_height_gap = 80  # 每層之間的高度差（調整為更容易跳躍的距離）
+        platform_min_width = 100  # 增加最小寬度讓平台更好跳上去
+        platform_max_width = 180  # 增加最大寬度
 
-        # 生成一些高台平台用於跑酷
-        for i in range(1, 6):
-            platform_x = i * (self.level_width // 6) + random.randint(-50, 50)
-            platform_y = SCREEN_HEIGHT - random.randint(200, 350)
-            platform_width = random.randint(80, 120)
+        for level in range(1, self.total_levels + 1):
+            # 計算這層的基準高度
+            base_y = SCREEN_HEIGHT - 40 - (level * level_height_gap)
 
-            platform = Platform(platform_x, platform_y, platform_width, 20)
-            self.platforms.append(platform)
+            # 每層的平台分佈在整個關卡寬度上
+            section_width = self.level_width // platforms_per_level
 
-        # 生成熔岩池陷阱
-        for i in range(5):
-            lava_x = random.randint(100, self.level_width - 200)
-            lava_y = SCREEN_HEIGHT - 80
-            lava_width = random.randint(80, 150)
-            lava_height = 60
+            for section in range(platforms_per_level):
+                # 在每個區段內隨機放置平台
+                section_start = section * section_width
+                section_end = section_start + section_width
 
-            lava_pool = LavaPool(lava_x, lava_y, lava_width, lava_height)
-            self.hazards.append(lava_pool)
+                # 平台位置隨機，但確保可達性（減少間距）
+                platform_x = random.randint(
+                    section_start + 10, section_end - platform_max_width - 10
+                )
 
-    def generate_underwater_level(self):
+                # 平台高度變化更小，讓跳躍更容易
+                height_variation = random.randint(-10, 10)
+                platform_y = base_y + height_variation
+
+                # 平台寬度隨機
+                platform_width = random.randint(platform_min_width, platform_max_width)
+
+                # 確保平台不會太接近邊界
+                if platform_x + platform_width > self.level_width:
+                    platform_x = self.level_width - platform_width
+
+                # 創建平台
+                platform = Platform(platform_x, platform_y, platform_width, 20)
+                self.platforms.append(platform)
+
+                # 為了增加趣味性，每層隨機增加一些小平台
+                if random.random() < 0.3:  # 30%機率
+                    extra_x = platform_x + platform_width + random.randint(60, 120)
+                    if extra_x + 60 < section_end:
+                        extra_platform = Platform(
+                            extra_x, platform_y + random.randint(-20, 20), 60, 15
+                        )
+                        self.platforms.append(extra_platform)
+
+    def place_target_star(self):
         """
-        生成海底主題關卡\n
+        在最高層放置閃閃發亮的目標星星\n
+        """
+        # 星星放在最高層的中央平台上（使用新的高度差120）
+        star_y = SCREEN_HEIGHT - 40 - (self.total_levels * 120) - 50
+        self.star_x = self.level_width // 2
+        self.star_y = star_y
+        self.star_collected = False
+
+        # 在星星下方創建一個特殊的大平台
+        star_platform = Platform(self.star_x - 100, star_y + 40, 200, 30)
+        self.platforms.append(star_platform)
+
+    def check_star_collision(self, player):
+        """
+        檢查玩家是否碰到目標星星\n
         \n
-        特色:\n
-        - 水流陷阱\n
-        - 珊瑚礁平台\n
-        - 水中物理效果\n
-        """
-        # 生成基礎平台（海底地形）
-        platform_y = SCREEN_HEIGHT - 80
-        for i in range(0, self.level_width, 150):
-            platform_width = random.randint(100, 200)
-            height_variation = random.randint(-30, 30)
-
-            platform = Platform(i, platform_y + height_variation, platform_width, 30)
-            self.platforms.append(platform)
-
-        # 生成珊瑚礁平台
-        for i in range(1, 8):
-            platform_x = i * (self.level_width // 8) + random.randint(-40, 40)
-            platform_y = SCREEN_HEIGHT - random.randint(150, 300)
-            platform_width = random.randint(60, 100)
-
-            platform = Platform(platform_x, platform_y, platform_width, 15)
-            self.platforms.append(platform)
-
-        # 生成水流陷阱
-        for i in range(4):
-            current_x = random.randint(200, self.level_width - 300)
-            current_y = random.randint(100, SCREEN_HEIGHT - 200)
-            current_width = random.randint(100, 200)
-            current_height = random.randint(80, 150)
-
-            # 隨機水流方向
-            flow_directions = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)]
-            flow_direction = random.choice(flow_directions)
-
-            water_current = WaterCurrent(
-                current_x, current_y, current_width, current_height, flow_direction
-            )
-            self.hazards.append(water_current)
-
-    def generate_hurricane_level(self):
-        """
-        生成颶風主題關卡\n
+        參數:\n
+        player (Player): 玩家物件\n
         \n
-        特色:\n
-        - 風暴陷阱\n
-        - 浮動平台\n
-        - 強風環境效果\n
+        回傳:\n
+        bool: 是否收集到星星\n
         """
-        # 生成基礎平台
-        platform_y = SCREEN_HEIGHT - 60
-        for i in range(0, self.level_width, 250):
-            platform_width = random.randint(100, 160)
+        if self.star_collected:
+            return False
 
-            platform = Platform(i, platform_y, platform_width, 20)
-            self.platforms.append(platform)
+        # 星星的碰撞範圍
+        star_size = 30
+        star_rect = pygame.Rect(
+            self.star_x - star_size // 2,
+            self.star_y - star_size // 2,
+            star_size,
+            star_size,
+        )
+        player_rect = pygame.Rect(player.x, player.y, player.width, player.height)
 
-        # 生成浮動平台（高度較高）
-        for i in range(1, 10):
-            platform_x = i * (self.level_width // 10) + random.randint(-60, 60)
-            platform_y = SCREEN_HEIGHT - random.randint(200, 400)
-            platform_width = random.randint(80, 120)
+        if player_rect.colliderect(star_rect):
+            self.star_collected = True
+            return True
 
-            platform = Platform(platform_x, platform_y, platform_width, 15)
-            self.platforms.append(platform)
-
-        # 生成風暴陷阱
-        for i in range(6):
-            wind_x = random.randint(100, self.level_width - 200)
-            wind_y = random.randint(50, SCREEN_HEIGHT - 150)
-            wind_width = random.randint(120, 200)
-            wind_height = random.randint(100, 180)
-
-            # 隨機風向
-            wind_directions = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]
-            wind_direction = random.choice(wind_directions)
-
-            wind_gust = WindGust(
-                wind_x, wind_y, wind_width, wind_height, wind_direction
-            )
-            self.hazards.append(wind_gust)
-
-    def next_level(self):
-        """
-        進入下一關\n
-        """
-        self.current_level += 1
-        self.generate_level()
-
-    def advance_to_next_level(self):
-        """
-        進階到下一個主題關卡\n
-        """
-        # 循環切換主題
-        themes = ["volcano", "underwater", "hurricane"]
-        current_theme_index = themes.index(self.level_theme)
-        next_theme_index = (current_theme_index + 1) % len(themes)
-        self.level_theme = themes[next_theme_index]
-
-        # 重新生成關卡
-        self.generate_level()
-        print(f"🎮 關卡主題切換至: {self.level_theme}")
-
-    def reset_level(self):
-        """
-        重置當前關卡\n
-        """
-        self.generate_level()
+        return False
 
     def update(self, dt, player, bullets):
         """
@@ -619,36 +572,25 @@ class LevelManager:
         player (Player): 玩家物件\n
         bullets (list): 子彈列表\n
         """
-        # 更新所有陷阱
-        for hazard in self.hazards:
-            hazard.update(dt)
+        # 檢查玩家是否收集到星星
+        if self.check_star_collision(player):
+            print("🌟 恭喜！您找到了目標星星！")
+            return {"star_collected": True}
 
-            # 陷阱對玩家的影響
-            if isinstance(hazard, (WaterCurrent, WindGust)):
-                hazard.apply_force_to_player(player, dt)
-
-            # 風暴對子彈的影響
-            if isinstance(hazard, WindGust):
-                for bullet in bullets:
-                    hazard.apply_force_to_bullet(bullet, dt)
+        return {"star_collected": False}
 
     def check_hazard_collisions(self, player):
         """
-        檢查玩家與陷阱的碰撞\n
+        檢查玩家與環境的碰撞（現在沒有危險陷阱）\n
         \n
         參數:\n
         player (Player): 玩家物件\n
         \n
         回傳:\n
-        int: 受到的總傷害\n
+        int: 受到的總傷害（現在總是0）\n
         """
-        total_damage = 0
-
-        for hazard in self.hazards:
-            if hazard.check_collision(player):
-                total_damage += hazard.damage
-
-        return total_damage
+        # 移除所有危險陷阱，返回0傷害
+        return 0
 
     def get_platforms(self):
         """
@@ -668,23 +610,80 @@ class LevelManager:
         camera_x (int): 攝影機 x 偏移\n
         camera_y (int): 攝影機 y 偏移\n
         """
-        # 繪製背景顏色（根據主題）
-        if self.level_theme == "volcano":
-            background_color = (80, 40, 20)  # 深棕紅色
-        elif self.level_theme == "underwater":
-            background_color = (20, 50, 80)  # 深藍色
-        else:  # hurricane
-            background_color = (40, 40, 60)  # 深灰色
-
+        # 繪製背景顏色（爽朗的天空藍）
+        background_color = (135, 206, 235)  # 天空藍
         screen.fill(background_color)
 
         # 繪製平台
         for platform in self.platforms:
             platform.draw(screen, camera_x, camera_y)
 
-        # 繪製陷阱
-        for hazard in self.hazards:
-            hazard.draw(screen, camera_x, camera_y)
+        # 繪製目標星星（如果還沒被收集）
+        if not self.star_collected:
+            self.draw_target_star(screen, camera_x, camera_y)
+
+    def draw_target_star(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製閃閃發亮的目標星星\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 遊戲畫面\n
+        camera_x (int): 攝影機 x 偏移\n
+        camera_y (int): 攝影機 y 偏移\n
+        """
+        # 計算螢幕位置
+        screen_x = self.star_x - camera_x
+        screen_y = self.star_y - camera_y
+
+        # 只在螢幕範圍內繪製
+        if (
+            -50 <= screen_x <= SCREEN_WIDTH + 50
+            and -50 <= screen_y <= SCREEN_HEIGHT + 50
+        ):
+
+            # 創建閃爍效果
+            import time
+
+            flash_intensity = abs(math.sin(time.time() * 4)) * 0.5 + 0.5
+
+            # 星星大小
+            star_size = 25
+
+            # 繪製發光外圈
+            glow_color = (255, 255, int(100 + flash_intensity * 155))
+            for i in range(5, 0, -1):
+                alpha = int((6 - i) * flash_intensity * 50)
+                glow_surface = pygame.Surface((star_size + i * 4, star_size + i * 4))
+                glow_surface.set_alpha(alpha)
+                glow_surface.fill(glow_color)
+                screen.blit(
+                    glow_surface,
+                    (
+                        screen_x - star_size // 2 - i * 2,
+                        screen_y - star_size // 2 - i * 2,
+                    ),
+                )
+
+            # 繪製星星主體（五角星）
+            star_color = (255, 255, int(150 + flash_intensity * 105))
+            star_points = []
+
+            # 計算五角星的頂點
+            for i in range(10):
+                angle = math.pi * i / 5
+                if i % 2 == 0:
+                    # 外圍頂點
+                    radius = star_size
+                else:
+                    # 內圍頂點
+                    radius = star_size * 0.4
+
+                x = screen_x + radius * math.cos(angle - math.pi / 2)
+                y = screen_y + radius * math.sin(angle - math.pi / 2)
+                star_points.append((x, y))
+
+            if len(star_points) >= 3:
+                pygame.draw.polygon(screen, star_color, star_points)
 
     def get_level_info(self):
         """
@@ -698,6 +697,7 @@ class LevelManager:
             "theme": self.level_theme,
             "width": self.level_width,
             "height": self.level_height,
+            "total_levels": self.total_levels,
             "platform_count": len(self.platforms),
-            "hazard_count": len(self.hazards),
+            "star_collected": self.star_collected,
         }

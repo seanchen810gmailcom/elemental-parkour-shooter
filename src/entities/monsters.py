@@ -48,6 +48,10 @@ class Monster(GameObject):
         self.direction = random.choice([-1, 1])  # 隨機初始方向
         self.on_ground = False
 
+        # 平台相關（防止掉落）
+        self.home_platform = None  # 怪物所屬的平台
+        self.platform_margin = 20  # 距離平台邊緣的安全距離
+
         # AI 狀態
         self.ai_state = "patrol"  # 'patrol', 'chase', 'attack', 'stunned'
         self.target_player = None
@@ -278,6 +282,9 @@ class Monster(GameObject):
         self.x += self.velocity_x
         self.y += self.velocity_y
 
+        # 檢查是否即將掉出所屬平台
+        self.check_platform_boundary()
+
         # 處理碰撞
         self.handle_collisions(platforms)
 
@@ -295,6 +302,33 @@ class Monster(GameObject):
 
         # 更新碰撞矩形
         self.update_rect()
+
+    def check_platform_boundary(self):
+        """
+        檢查怪物是否即將掉出所屬平台，如果是則調頭\n
+        """
+        if self.home_platform is None:
+            return
+
+        # 檢查左邊界
+        if self.x <= self.home_platform.x + self.platform_margin:
+            self.x = self.home_platform.x + self.platform_margin
+            self.direction = 1  # 向右轉
+            self.velocity_x = 0
+
+        # 檢查右邊界
+        elif (
+            self.x + self.width
+            >= self.home_platform.x + self.home_platform.width - self.platform_margin
+        ):
+            self.x = (
+                self.home_platform.x
+                + self.home_platform.width
+                - self.platform_margin
+                - self.width
+            )
+            self.direction = -1  # 向左轉
+            self.velocity_x = 0
 
     def handle_collisions(self, platforms):
         """

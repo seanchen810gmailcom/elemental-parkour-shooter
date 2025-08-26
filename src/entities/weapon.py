@@ -201,8 +201,7 @@ class Bullet(GameObject):
             ]
             pygame.draw.polygon(screen, self.color, points)
 
-        # 給所有子彈加上白色邊框，增加可見度
-        pygame.draw.rect(screen, WHITE, self.rect, 1)
+        # 移除白色邊框以改善視覺效果
 
 
 ######################武器管理器類別######################

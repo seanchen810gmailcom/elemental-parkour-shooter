@@ -1,279 +1,83 @@
-# ###################### Python 相關檔案 ######################
+# ====================== Python ======================
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# C extensions
-*.so
+# Virtual environments
+.venv/
+venv/
+env/
+.env
 
 # Distribution / packaging
-.Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+pip-wheel-metadata/
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+# Installer / build artifacts
 *.manifest
 *.spec
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
+# Test / coverage
 .pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# ###################### IDE 相關檔案 ######################
-# VS Code
+# Editor / IDE
 .vscode/
 *.code-workspace
-
-# PyCharm
 .idea/
-*.iml
-*.iws
 
-# Sublime Text
-*.sublime-project
-*.sublime-workspace
-
-# Vim
-*.swp
-*.swo
-*~
-
-# Emacs
-*~
-\#*\#
-/.emacs.desktop
-/.emacs.desktop.lock
-*.elc
-auto-save-list
-tramp
-.\#*
-
-# ###################### 作業系統相關檔案 ######################
-# macOS
+# OS
 .DS_Store
-.AppleDouble
-.LSOverride
-
-# Icon must end with two \r
-Icon
-
 # Thumbnails
 ._*
 
-# Files that might appear in the root of a volume
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
-
-# Directories potentially created on remote AFP share
-.AppleDB
-.AppleDesktop
-Network Trash Folder
-Temporary Items
-.apdisk
-
-# Windows
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.tmp
-*.temp
-Desktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
-
-# Linux
-*~
-
-# ###################### 遊戲開發相關檔案 ######################
-# 遊戲存檔和設定檔案
-saves/
-*.save
-*.dat
-config.ini
-settings.json
-
-# 遊戲資源暫存檔案
-*.cache
+# ====================== Project / Game Assets ======================
+# Ignore large or generated game assets and temporary data
+assets/
+assets/images/
+assets/sprites/
+assets/sounds/
+assets/music/
+assets/fonts/
+resources/
 cache/
 temp/
 tmp/
 
-# 截圖和錄影
+# Saved games / user data
+saves/
+*.save
+*.dat
+
+# Screenshots / recordings
 screenshots/
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.mp4
-*.avi
 *.mov
 
-# 音效檔案（如果不需要版本控制）
-# sounds/
-# *.wav
-# *.mp3
-# *.ogg
-
-# 字型檔案（如果使用自訂字型但不需要版本控制）
-# fonts/
-# *.ttf
-# *.otf
-
-# 關卡編輯器生成的檔案
-levels/temp/
-*.level.bak
-*.level.tmp
-
-# 效能分析和除錯檔案
-*.prof
-profile_results/
+# Logs and debug
 debug_logs/
+*.log
 
-# 打包相關檔案
-build/
-dist/
-*.exe
-*.app
-*.dmg
-*.deb
-*.rpm
+# Editor metadata
+*.swp
+*~
 
-# ###################### 專案特定檔案 ######################
-# 本專案的特定暫存檔案
+# ====================== Project-specific ======================
 src/temp/
 src/cache/
-
-# 測試產生的檔案
 test_output/
 test_screenshots/
 
-# 開發筆記（個人使用）
-notes.txt
-todo.txt
-dev_notes.md
-
-# 環境變數設定檔
+# Environment configs (local overrides)
 .env.local
 .env.development
 .env.production

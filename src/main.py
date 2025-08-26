@@ -9,7 +9,6 @@ from .entities.weapon import WeaponManager
 from .systems.monster_manager import MonsterManager
 from .systems.damage_display import DamageDisplayManager
 from .systems.level_system import LevelManager
-from .systems.boss_system import BossManager
 
 ######################遊戲主類別######################
 
@@ -52,12 +51,8 @@ class ElementalParkourShooter:
         self.game_state = "playing"  # 目前先直接開始遊戲，之後可加入選單
         self.running = True
 
-        # 遊戲進度管理
-        self.current_level = 1
-        self.max_level = 3  # 三個主題關卡
-        self.level_completed = False
-        self.waves_completed_in_level = 0
-        self.waves_needed_per_level = 9  # 每關需要完成9波（3次Boss戰）
+        # 遊戲進度管理（簡化為只有一個跑酷關卡）
+        self.star_collected = False
 
         # 分數系統
         self.score = 0
@@ -69,7 +64,6 @@ class ElementalParkourShooter:
         self.monster_manager = MonsterManager()  # 怪物系統管理器
         self.damage_display = DamageDisplayManager()  # 傷害顯示管理器
         self.level_manager = LevelManager()  # 關卡場景管理器
-        self.boss_manager = BossManager()  # Boss 戰鬥管理器
 
         # 攝影機系統
         self.camera_x = 0
@@ -114,12 +108,6 @@ class ElementalParkourShooter:
                     # 按 R 鍵重新開始遊戲
                     if self.game_state in ["game_over", "victory"]:
                         self.reset_game()
-                elif event.key == pygame.K_SPACE:
-                    # 按空白鍵暫停/繼續遊戲
-                    if self.game_state == "playing":
-                        self.game_state = "paused"
-                    elif self.game_state == "paused":
-                        self.game_state = "playing"
 
         # 處理連續按鍵和滑鼠輸入
         if self.game_state == "playing" and self.player.is_alive:
@@ -149,17 +137,12 @@ class ElementalParkourShooter:
                 platforms = self.level_manager.get_platforms()
                 self.player.update(platforms)
 
-                # 檢查玩家與陷阱的碰撞
+                # 檢查玩家與陷阱的碰撞（現在沒有危險陷阱）
                 hazard_damage = self.level_manager.check_hazard_collisions(self.player)
-                if hazard_damage > 0:
-                    self.player.take_damage(hazard_damage)
+                # hazard_damage 現在總是 0
 
-                # 處理玩家的射擊
-                bullet_info = (
-                    self.player.shoot()
-                    if self.player.keys_pressed.get("shoot", False)
-                    else None
-                )
+                # 處理玩家的射擊 - 檢查是否有待發射的子彈
+                bullet_info = self.player.get_pending_bullet()
                 if bullet_info:
                     self.weapon_manager.create_bullet(bullet_info)
 
@@ -177,22 +160,19 @@ class ElementalParkourShooter:
                     # 每擊中一個怪物得20分
                     self.score += len(hit_monsters) * 20
 
-                    # 檢查近戰攻擊是否擊中Boss
-                    current_boss = self.boss_manager.get_current_boss()
-                    if current_boss:
-                        hit_boss = self.weapon_manager.handle_melee_attack(
-                            melee_info, [current_boss]
-                        )
-                        if hit_boss:
-                            self.score += 100  # 近戰擊中Boss得更多分
-
-                # 檢查玩家是否死亡
+                # 檢查玩家是否死亡（現在只會從重生處理）
                 if not self.player.is_alive:
-                    self.game_state = "game_over"
+                    # 不用立即結束遊戲，玩家會自動重生
+                    pass
 
             # 更新關卡系統
             bullets = self.weapon_manager.bullets
-            self.level_manager.update(dt, self.player, bullets)
+            level_update_result = self.level_manager.update(dt, self.player, bullets)
+
+            # 檢查是否收集到星星
+            if level_update_result.get("star_collected", False):
+                self.game_state = "victory"
+                self.score += 10000  # 收集星星的大獎勵
 
             # 更新攝影機
             self.update_camera()
@@ -207,35 +187,10 @@ class ElementalParkourShooter:
             if monster_update_result["monsters_killed"] > 0:
                 self.score += monster_update_result["monsters_killed"] * 50
 
-            # 波次推進時額外得分
-            if monster_update_result["wave_advanced"]:
-                self.score += 200
-                self.waves_completed_in_level += 1
-                print(f"第 {monster_update_result['current_wave']} 波完成！")
-
-                # 檢查是否完成當前關卡
-                if self.waves_completed_in_level >= self.waves_needed_per_level:
-                    self.complete_level()
-
-            # 檢查是否應該生成Boss
-            current_wave = self.monster_manager.wave_number
-            if (
-                self.boss_manager.should_spawn_boss(self.level_manager, current_wave)
-                and not self.boss_manager.boss_active
-            ):
-                self.boss_manager.spawn_boss(self.level_manager)
-
-            # 更新Boss系統
-            boss_defeated = self.boss_manager.update(dt, self.player, platforms)
-            if boss_defeated:
-                self.score += 1000  # Boss擊敗獎勵分數
-                print(f"Boss 被擊敗！獲得 1000 分獎勵！")
+            # Boss系統移除，簡化遊戲體驗
 
             # 更新武器系統（子彈飛行等）
             all_targets = self.monster_manager.monsters[:]  # 複製怪物列表
-            current_boss = self.boss_manager.get_current_boss()
-            if current_boss:
-                all_targets.append(current_boss)  # 將Boss加入目標列表
 
             collision_results = self.weapon_manager.update(targets=all_targets)
 
@@ -243,9 +198,6 @@ class ElementalParkourShooter:
             for collision in collision_results:
                 # 每發子彈擊中得10分
                 base_score = 10
-                # 如果擊中的是Boss，額外得分
-                if hasattr(collision["target"], "boss_type"):
-                    base_score = 50  # Boss碰撞得更多分
                 self.score += base_score
 
                 # 顯示傷害數字
@@ -254,9 +206,7 @@ class ElementalParkourShooter:
                 damage = collision["damage"]
 
                 # 在怪物位置顯示傷害數字
-                target_type = getattr(
-                    target, "monster_type", getattr(target, "boss_type", "unknown")
-                )
+                target_type = getattr(target, "monster_type", "unknown")
                 self.damage_display.add_damage_number(
                     target.x + target.width // 2,
                     target.y,
@@ -278,50 +228,13 @@ class ElementalParkourShooter:
             # 更新傷害顯示
             self.damage_display.update()
 
-    def complete_level(self):
-        """
-        完成當前關卡的處理\n
-        """
-        print(f"🎉 第 {self.current_level} 關完成！")
-        self.score += 2000  # 關卡完成獎勵
-
-        if self.current_level >= self.max_level:
-            # 遊戲勝利
-            self.game_state = "victory"
-            print("🏆 恭喜！您已完成所有關卡！")
-        else:
-            # 進入下一關
-            self.current_level += 1
-            self.waves_completed_in_level = 0
-
-            # 重置系統狀態
-            self.monster_manager.reset_for_new_level()
-            self.boss_manager = BossManager()  # 重置Boss管理器
-
-            # 切換到新的關卡主題
-            self.level_manager.advance_to_next_level()
-
-            # 重新定位玩家
-            self.player.x = 100
-            self.player.y = SCREEN_HEIGHT - 200
-            self.player.velocity_x = 0
-            self.player.velocity_y = 0
-
-            # 恢復玩家血量
-            self.player.health = min(self.player.max_health, self.player.health + 50)
-
-            print(
-                f"🚀 進入第 {self.current_level} 關：{self.level_manager.level_theme.title()}"
-            )
-
     def reset_game(self):
         """
         重置遊戲到初始狀態\n
         """
         # 重置遊戲狀態
         self.game_state = "playing"
-        self.current_level = 1
-        self.waves_completed_in_level = 0
+        self.star_collected = False
         self.score = 0
 
         # 重置遊戲物件
@@ -330,7 +243,6 @@ class ElementalParkourShooter:
         self.monster_manager = MonsterManager()
         self.damage_display = DamageDisplayManager()
         self.level_manager = LevelManager()
-        self.boss_manager = BossManager()
 
         # 重置攝影機
         self.camera_x = 0
@@ -356,9 +268,6 @@ class ElementalParkourShooter:
             # 繪製怪物（需要攝影機偏移）
             self.monster_manager.draw(self.screen, self.camera_x, self.camera_y)
 
-            # 繪製Boss系統
-            self.boss_manager.draw(self.screen, self.camera_x, self.camera_y)
-
             # 繪製武器系統（子彈等）
             self.weapon_manager.draw(self.screen, self.camera_x, self.camera_y)
 
@@ -373,45 +282,26 @@ class ElementalParkourShooter:
             self.player.draw_health_bar(self.screen)
             self.player.draw_bullet_ui(self.screen)
 
-            # 獲取怪物統計資訊
-            monster_stats = self.monster_manager.get_monster_stats()
-            level_info = self.level_manager.get_level_info()
-
-            # 繪製遊戲資訊
-            boss_info = "Boss戰中！" if self.boss_manager.boss_active else ""
+            # 繪製簡化的遊戲資訊（只顯示分數）
             info_texts = [
                 f"分數: {self.score}",
-                f"關卡: {self.current_level}/{self.max_level} ({level_info['theme'].capitalize()})",
-                f"波次: {monster_stats['current_wave']} {boss_info}",
-                f"進度: {self.waves_completed_in_level}/{self.waves_needed_per_level} 波",
-                f"怪物: {monster_stats['total_alive']}/{monster_stats['max_monsters']}",
-                f"擊殺: {monster_stats['total_killed']}",
-                f"子彈: {self.weapon_manager.get_bullet_count()}",
             ]
 
+            # 將分數顯示在右上角，簡潔顯示
             for i, text in enumerate(info_texts):
-                rendered_text = self.font.render(text, True, SCORE_COLOR)
-                self.screen.blit(rendered_text, (10, 10 + i * 30))
+                rendered_text = self.font.render(text, True, WHITE)
+                text_width = rendered_text.get_width()
+                self.screen.blit(
+                    rendered_text, (SCREEN_WIDTH - text_width - 10, 10 + i * 30)
+                )
 
-            # 繪製怪物類型統計
-            type_info = [
-                f"岩漿: {monster_stats['type_counts']['lava']}",
-                f"水: {monster_stats['type_counts']['water']}",
-                f"風: {monster_stats['type_counts']['tornado']}",
-            ]
-
-            small_font = get_chinese_font(FONT_SIZE_NORMAL)
-            for i, text in enumerate(type_info):
-                rendered_text = small_font.render(text, True, WHITE)
-                self.screen.blit(rendered_text, (SCREEN_WIDTH - 150, 10 + i * 25))
-
-            # 繪製控制說明
+            # 繪製控制說明（移動到左下角）
             instructions = [
-                "WASD/方向鍵: 移動和跳躍",
+                "WASD/方向鍵: 移動",
+                "W/空格/上鍵: 跳躍",
                 "滑鼠左鍵: 射擊",
                 "滑鼠右鍵: 近戰攻擊",
                 "1234: 切換子彈類型",
-                "空白鍵: 暫停/繼續",
                 "ESC: 離開遊戲",
             ]
 
@@ -419,25 +309,6 @@ class ElementalParkourShooter:
             for i, instruction in enumerate(instructions):
                 text = font_small.render(instruction, True, WHITE)
                 self.screen.blit(text, (10, SCREEN_HEIGHT - 140 + i * 22))
-
-        elif self.game_state == "paused":
-            # 繪製暫停畫面
-            pause_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            pause_surface.set_alpha(128)
-            pause_surface.fill(BLACK)
-            self.screen.blit(pause_surface, (0, 0))
-
-            pause_text = self.font.render("遊戲已暫停", True, WHITE)
-            text_rect = pause_text.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-            )
-            self.screen.blit(pause_text, text_rect)
-
-            continue_text = self.font.render("按空白鍵繼續", True, WHITE)
-            continue_rect = continue_text.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)
-            )
-            self.screen.blit(continue_text, continue_rect)
 
         elif self.game_state == "victory":
             # 繪製勝利畫面
@@ -457,7 +328,7 @@ class ElementalParkourShooter:
             )
             self.screen.blit(score_text, score_rect)
 
-            congrats_text = self.font.render("恭喜完成所有關卡！", True, GREEN)
+            congrats_text = self.font.render("恭喜找到目標星星！", True, GREEN)
             congrats_rect = congrats_text.get_rect(
                 center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20)
             )
@@ -488,7 +359,9 @@ class ElementalParkourShooter:
             self.screen.blit(score_text, score_rect)
 
             level_text = self.font.render(
-                f"到達關卡: {self.current_level}/{self.max_level}", True, WHITE
+                f"爬升高度: 第 {int(-(self.player.y - SCREEN_HEIGHT) / 120)} 層",
+                True,
+                WHITE,
             )
             level_rect = level_text.get_rect(
                 center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)
