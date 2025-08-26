@@ -2,8 +2,8 @@
 import pygame
 import time
 import random
-from config import *
-from element_system import ElementSystem
+from ..config import *
+from ..core.element_system import ElementSystem
 
 ######################傷害數字顯示系統######################
 
@@ -47,7 +47,7 @@ class DamageNumber:
 
         # 字體設定
         self.font_size = max(16, int(24 * size_multiplier))
-        self.font = pygame.font.Font(None, self.font_size)
+        self.font = get_chinese_font(self.font_size)
 
     def update(self):
         """
@@ -97,7 +97,7 @@ class DamageNumber:
 
         # 如果有特殊效果，在下方顯示類型
         if self.damage_type != "普通傷害":
-            type_font = pygame.font.Font(None, max(12, int(16 * self.size_multiplier)))
+            type_font = get_chinese_font(max(12, int(16 * self.size_multiplier)))
             type_text = type_font.render(self.damage_type, True, self.color)
             type_rect = type_text.get_rect()
             type_rect.center = (int(screen_x), int(screen_y + text_rect.height))

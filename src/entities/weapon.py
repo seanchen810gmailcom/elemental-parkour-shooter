@@ -2,9 +2,9 @@
 import pygame
 import math
 import time
-from config import *
-from game_objects import GameObject
-from element_system import ElementSystem
+from ..config import *
+from ..core.game_objects import GameObject
+from ..core.element_system import ElementSystem
 
 ######################子彈類別######################
 

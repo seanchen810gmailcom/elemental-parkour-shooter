@@ -2,8 +2,8 @@
 import pygame
 import random
 import math
-from config import *
-from game_objects import *
+from ..config import *
+from ..core.game_objects import *
 
 ######################場景物件類別######################
 
@@ -588,6 +588,26 @@ class LevelManager:
         進入下一關\n
         """
         self.current_level += 1
+        self.generate_level()
+
+    def advance_to_next_level(self):
+        """
+        進階到下一個主題關卡\n
+        """
+        # 循環切換主題
+        themes = ["volcano", "underwater", "hurricane"]
+        current_theme_index = themes.index(self.level_theme)
+        next_theme_index = (current_theme_index + 1) % len(themes)
+        self.level_theme = themes[next_theme_index]
+
+        # 重新生成關卡
+        self.generate_level()
+        print(f"🎮 關卡主題切換至: {self.level_theme}")
+
+    def reset_level(self):
+        """
+        重置當前關卡\n
+        """
         self.generate_level()
 
     def update(self, dt, player, bullets):

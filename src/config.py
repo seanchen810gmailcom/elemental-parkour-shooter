@@ -170,3 +170,82 @@ BULLET_UI_Y = 50
 # 分數顯示
 SCORE_FONT_SIZE = 36
 SCORE_COLOR = WHITE
+
+######################字體設定######################
+
+import pygame
+import os
+
+# 繁體中文字體路徑設定
+# macOS 系統內建字體路徑
+CHINESE_FONTS = [
+    "/System/Library/Fonts/STHeiti Light.ttc",  # 黑體-繁（最佳選擇）
+    "/System/Library/Fonts/STHeiti Medium.ttc",  # 黑體-中（備選）
+    "/System/Library/Fonts/Helvetica.ttc",  # macOS 預設字體（支援部分中文）
+    "/Library/Fonts/Microsoft JhengHei.ttf",  # 微軟正黑體
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",  # 冬青黑體
+    "NotoSansCJK-Regular.ttc",  # Google 思源黑體
+    "SimHei.ttf",  # 簡體黑體（也支援繁體）
+]
+
+# 字體大小設定
+FONT_SIZE_LARGE = 72  # 遊戲結束、勝利標題
+FONT_SIZE_MEDIUM = 36  # 分數顯示
+FONT_SIZE_NORMAL = 24  # 一般文字
+FONT_SIZE_SMALL = 20  # 說明文字
+FONT_SIZE_TINY = 16  # 最小文字
+
+# 字體緩存字典，避免重複載入
+_font_cache = {}
+
+
+def get_chinese_font(size):
+    """
+    獲取支援繁體中文的字體\n
+    \n
+    此函數會依序嘗試載入繁體中文字體，如果都失敗則使用預設字體\n
+    使用緩存機制避免重複載入同樣大小的字體\n
+    \n
+    參數:\n
+    size (int): 字體大小，範圍 > 0\n
+    \n
+    回傳:\n
+    pygame.font.Font: 字體物件，保證不會是 None\n
+    \n
+    降級策略:\n
+    1. 檢查緩存中是否已有相同大小的字體\n
+    2. 嘗試載入系統中的繁體中文字體\n
+    3. 如果都失敗，使用 pygame 預設字體\n
+    4. 確保遊戲能正常運行，即使字體不完美\n
+    """
+    # 檢查緩存中是否已有這個大小的字體
+    if size in _font_cache:
+        return _font_cache[size]
+
+    # 確保 pygame 字體模組已初始化
+    if not pygame.get_init() or not pygame.font.get_init():
+        pygame.font.init()
+
+    font = None
+
+    # 嘗試載入繁體中文字體
+    for font_path in CHINESE_FONTS:
+        try:
+            # 檢查字體檔案是否存在
+            if os.path.exists(font_path):
+                # 嘗試載入字體
+                font = pygame.font.Font(font_path, size)
+                print(f"成功載入字體: {font_path} (大小: {size})")
+                break
+        except (pygame.error, OSError, FileNotFoundError) as e:
+            # 字體載入失敗，繼續嘗試下一個
+            continue
+
+    # 所有字體都載入失敗，使用預設字體
+    if font is None:
+        print(f"所有中文字體載入失敗，使用預設字體，大小: {size}")
+        font = pygame.font.Font(None, size)
+
+    # 將字體加入緩存
+    _font_cache[size] = font
+    return font

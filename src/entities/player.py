@@ -1,8 +1,8 @@
 ######################載入套件######################
 import pygame
 import time
-from config import *
-from game_objects import GameObject, StatusEffect
+from ..config import *
+from ..core.game_objects import GameObject, StatusEffect
 
 ######################玩家類別######################
 
@@ -511,7 +511,7 @@ class Player(GameObject):
         pygame.draw.rect(screen, WHITE, bg_rect, 2)
 
         # 繪製生命值文字
-        font = pygame.font.Font(None, 24)
+        font = get_chinese_font(FONT_SIZE_NORMAL)
         health_text = font.render(
             f"生命值: {self.health}/{self.max_health}", True, WHITE
         )
@@ -551,7 +551,7 @@ class Player(GameObject):
                 pygame.draw.rect(screen, GRAY, ui_rect, 1)
 
             # 繪製按鍵提示
-            font = pygame.font.Font(None, 20)
+            font = get_chinese_font(FONT_SIZE_SMALL)
             key_text = font.render(str(i + 1), True, WHITE)
             text_rect = key_text.get_rect(
                 center=(ui_x + BULLET_UI_SIZE // 2, ui_y + BULLET_UI_SIZE + 15)

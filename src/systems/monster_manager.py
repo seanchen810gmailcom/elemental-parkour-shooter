@@ -2,8 +2,8 @@
 import pygame
 import random
 import time
-from config import *
-from monsters import LavaMonster, WaterMonster, TornadoMonster
+from ..config import *
+from ..entities.monsters import LavaMonster, WaterMonster, TornadoMonster
 
 ######################怪物管理器類別######################
 
@@ -340,3 +340,28 @@ class MonsterManager:
             "type_counts": type_counts,
             "max_monsters": self.max_monsters,
         }
+
+    def reset_for_new_level(self):
+        """
+        為新關卡重置怪物管理器\n
+        \n
+        清除所有現有怪物，重置計時器和統計\n
+        """
+        # 清除所有怪物
+        self.monsters.clear()
+
+        # 重置計時器和計數器
+        self.spawn_timer = 0
+        self.monsters_killed = 0
+
+        # 保持當前波次但可選擇重置
+        # self.wave_number = 1  # 如果要重置波次的話
+
+        print(f"🔄 怪物系統已為新關卡重置")
+
+    def clear_all_monsters(self):
+        """
+        清除所有怪物\n
+        """
+        self.monsters.clear()
+        print("🧹 已清除所有怪物")

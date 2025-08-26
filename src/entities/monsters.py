@@ -3,8 +3,8 @@ import pygame
 import math
 import random
 import time
-from config import *
-from game_objects import GameObject, StatusEffect
+from ..config import *
+from ..core.game_objects import GameObject, StatusEffect
 
 ######################基礎怪物類別######################
 

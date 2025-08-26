@@ -2,7 +2,7 @@
 import pygame
 import math
 import time
-from config import *
+from ..config import *
 
 ######################基礎物件類別######################
 
