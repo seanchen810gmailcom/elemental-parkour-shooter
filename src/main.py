@@ -43,6 +43,7 @@ class ElementalParkourShooter:
     遊戲狀態:\n
     - 'menu': 主選單\n
     - 'playing': 進行遊戲\n
+    - 'death_screen': 死亡重新開始畫面\n
     - 'paused': 暫停\n
     - 'game_over': 遊戲結束\n
     - 'victory': 勝利\n
@@ -67,6 +68,7 @@ class ElementalParkourShooter:
         # 遊戲狀態管理
         self.game_state = "playing"  # 目前先直接開始遊戲，之後可加入選單
         self.running = True
+        self.game_over_time = 0  # 進入遊戲結束狀態的時間
 
         # 遊戲進度管理（簡化為只有一個跑酷關卡）
         self.star_collected = False
@@ -123,7 +125,7 @@ class ElementalParkourShooter:
                     self.running = False
                 elif event.key == pygame.K_r:
                     # 按 R 鍵重新開始遊戲
-                    if self.game_state in ["game_over", "victory"]:
+                    if self.game_state in ["game_over", "victory", "death_screen"]:
                         self.reset_game()
 
         # 處理連續按鍵和滑鼠輸入
@@ -152,7 +154,16 @@ class ElementalParkourShooter:
             if self.player.is_alive:
                 # 使用關卡管理器的平台資料
                 platforms = self.level_manager.get_platforms()
-                self.player.update(platforms)
+                player_update_result = self.player.update(platforms)
+
+                # 檢查玩家更新結果（可能包含死亡資訊）
+                if player_update_result and player_update_result.get(
+                    "game_over", False
+                ):
+                    # 玩家死亡且沒有剩餘生命次數，進入遊戲結束狀態
+                    self.game_state = "game_over"
+                    self.game_over_time = time.time()
+                    print("💀 遊戲結束！")
 
                 # 檢查玩家與陷阱的碰撞（現在沒有危險陷阱）
                 hazard_damage = self.level_manager.check_hazard_collisions(self.player)
@@ -199,10 +210,17 @@ class ElementalParkourShooter:
                     # 每擊中一個怪物得20分
                     self.score += len(hit_monsters) * 20
 
-                # 檢查玩家是否死亡（現在只會從重生處理）
-                if not self.player.is_alive:
-                    # 不用立即結束遊戲，玩家會自動重生
-                    pass
+            elif self.player.is_dead:
+                # 玩家死亡但還有生命次數，進入死亡畫面
+                if self.player.lives > 0:
+                    self.game_state = "death_screen"
+                    self.game_over_time = time.time()
+                    print(f"� 玩家死亡！剩餘生命次數: {self.player.lives}")
+                else:
+                    # 沒有剩餘生命次數，遊戲結束
+                    self.game_state = "game_over"
+                    self.game_over_time = time.time()
+                    print("💀 遊戲結束！沒有剩餘生命次數")
 
             # 更新關卡系統
             bullets = self.weapon_manager.bullets
@@ -286,6 +304,11 @@ class ElementalParkourShooter:
 
             # 更新傷害顯示
             self.damage_display.update()
+            
+        elif self.game_state == "death_screen":
+            # 死亡畫面狀態 - 等待玩家按 R 重新開始
+            # 這個狀態不需要更新遊戲邏輯，只是等待玩家輸入
+            pass
 
     def reset_game(self):
         """
@@ -295,6 +318,7 @@ class ElementalParkourShooter:
         self.game_state = "playing"
         self.star_collected = False
         self.score = 0
+        self.game_over_time = 0
 
         # 重置遊戲物件
         self.player = Player(100, SCREEN_HEIGHT - 200)
@@ -306,6 +330,9 @@ class ElementalParkourShooter:
         # 重置攝影機
         self.camera_x = 0
         self.camera_y = 0
+
+        # 重置時間管理
+        self.last_update_time = time.time()
 
         print("🔄 遊戲已重置")
 
@@ -382,39 +409,98 @@ class ElementalParkourShooter:
             )
             self.screen.blit(restart_text, restart_rect)
 
-        elif self.game_state == "game_over":
-            # 繪製遊戲結束畫面
+        elif self.game_state == "death_screen":
+            # 繪製死亡重新開始畫面
             self.screen.fill(BLACK)
 
-            game_over_text = get_chinese_font(FONT_SIZE_LARGE).render(
-                "💀 遊戲結束", True, RED
+            # 死亡標題
+            death_text = get_chinese_font(FONT_SIZE_LARGE).render(
+                "💀 你死了！", True, RED
             )
-            text_rect = game_over_text.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50)
+            death_rect = death_text.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 120)
             )
-            self.screen.blit(game_over_text, text_rect)
+            self.screen.blit(death_text, death_rect)
 
-            score_text = self.font.render(f"最終分數: {self.score}", True, WHITE)
+            # 剩餘生命次數
+            lives_text = get_chinese_font(FONT_SIZE_MEDIUM).render(
+                f"剩餘生命次數: {self.player.lives}", True, YELLOW
+            )
+            lives_rect = lives_text.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 40)
+            )
+            self.screen.blit(lives_text, lives_rect)
+
+            # 當前分數
+            score_text = self.font.render(f"當前分數: {self.score}", True, WHITE)
             score_rect = score_text.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 10)
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
             )
             self.screen.blit(score_text, score_rect)
 
+            # 重新開始提示（使用較大字體突出顯示）
+            restart_text = get_chinese_font(FONT_SIZE_MEDIUM).render(
+                "按 R 鍵重新開始", True, GREEN
+            )
+            restart_rect = restart_text.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 60)
+            )
+            self.screen.blit(restart_text, restart_rect)
+
+            # 離開遊戲提示
+            quit_text = self.font.render("按 ESC 鍵離開遊戲", True, WHITE)
+            quit_rect = quit_text.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100)
+            )
+            self.screen.blit(quit_text, quit_rect)
+
+        elif self.game_state == "game_over":
+            # 繪製遊戲結束畫面
+            self.screen.fill(GAME_OVER_BG_COLOR)
+
+            # 標題文字
+            game_over_text = get_chinese_font(FONT_SIZE_LARGE).render(
+                DEATH_TITLE_TEXT, True, GAME_OVER_TITLE_COLOR
+            )
+            text_rect = game_over_text.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 120)
+            )
+            self.screen.blit(game_over_text, text_rect)
+
+            # 最終分數
+            score_text = self.font.render(
+                f"{DEATH_FINAL_SCORE_TEXT}: {self.score}", True, GAME_OVER_TEXT_COLOR
+            )
+            score_rect = score_text.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 40)
+            )
+            self.screen.blit(score_text, score_rect)
+
+            # 爬升高度（保留原有功能）
+            height_level = max(1, int(-(self.player.y - SCREEN_HEIGHT) / 120))
             level_text = self.font.render(
-                f"爬升高度: 第 {int(-(self.player.y - SCREEN_HEIGHT) / 120)} 層",
-                True,
-                WHITE,
+                f"爬升高度: 第 {height_level} 層", True, GAME_OVER_TEXT_COLOR
             )
             level_rect = level_text.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
             )
             self.screen.blit(level_text, level_rect)
 
-            restart_text = self.font.render("按 R 重新開始，ESC 離開", True, WHITE)
+            # 重新開始提示
+            restart_text = self.font.render(
+                DEATH_RETRY_TEXT, True, GAME_OVER_RETRY_COLOR
+            )
             restart_rect = restart_text.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100)
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 60)
             )
             self.screen.blit(restart_text, restart_rect)
+
+            # 離開遊戲提示
+            quit_text = self.font.render(DEATH_QUIT_TEXT, True, GAME_OVER_TEXT_COLOR)
+            quit_rect = quit_text.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100)
+            )
+            self.screen.blit(quit_text, quit_rect)
 
         # 更新整個螢幕顯示
         pygame.display.flip()

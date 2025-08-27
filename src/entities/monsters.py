@@ -228,7 +228,7 @@ class Monster(GameObject):
             return False
 
         # 對玩家造成傷害
-        player.take_damage(self.damage)
+        damage_result = player.take_damage(self.damage)
         self.last_attack_time = time.time()
 
         # 給玩家一個小的擊退效果

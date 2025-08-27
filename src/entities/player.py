@@ -53,6 +53,11 @@ class Player(GameObject):
         self.max_health = PLAYER_MAX_HEALTH
         self.is_alive = True
 
+        # 生命次數系統
+        self.lives = PLAYER_LIVES  # 玩家總生命次數
+        self.death_time = 0  # 死亡時間記錄
+        self.is_dead = False  # 是否已經死亡（區別於 is_alive）
+
         # 重生系統
         self.last_safe_x = x  # 上一個安全位置的x
         self.last_safe_y = y  # 上一個安全位置的y
@@ -450,19 +455,49 @@ class Player(GameObject):
 
         # 檢查是否掉出螢幕（需要重生）
         if self.y > SCREEN_HEIGHT + 200:
-            self.respawn()
+            # 掉出螢幕視為死亡，扣除生命次數
+            damage_result = self.take_damage(self.health)  # 造成致命傷害
+            if damage_result["game_over"]:
+                return damage_result  # 回傳遊戲結束資訊
+            else:
+                # 還有生命次數，準備重生
+                return damage_result
 
     def respawn(self):
         """
         重生玩家到上一個安全位置\n
+        \n
+        回傳:\n
+        bool: True 表示成功重生，False 表示無法重生（遊戲結束）\n
         """
+        # 檢查是否還有生命次數
+        if self.lives <= 0:
+            return False  # 無法重生，遊戲結束
+
         self.x = self.last_safe_x
         self.y = self.last_safe_y
         self.velocity_x = 0
         self.velocity_y = 0
         self.health = self.max_health  # 重生時恢復滿血
         self.is_alive = True
-        print(f"🔄 玩家重生到位置: ({int(self.x)}, {int(self.y)})")
+        self.is_dead = False
+        print(
+            f"🔄 玩家重生到位置: ({int(self.x)}, {int(self.y)})，剩餘生命: {self.lives}"
+        )
+        return True  # 成功重生
+
+    def can_respawn(self):
+        """
+        檢查是否可以重生（死亡延遲時間已過且還有生命次數）\n
+        \n
+        回傳:\n
+        bool: True 表示可以重生，False 表示還需要等待或已遊戲結束\n
+        """
+        if not self.is_dead or self.lives <= 0:
+            return False
+
+        current_time = time.time()
+        return (current_time - self.death_time) >= DEATH_RESPAWN_DELAY
 
     def handle_collisions(self, platforms):
         """
@@ -583,14 +618,32 @@ class Player(GameObject):
         damage (int): 受到的傷害值\n
         \n
         回傳:\n
-        bool: True 表示玩家死亡，False 表示還活著\n
+        dict: 傷害結果資訊 {\n
+            'health_lost': bool - 是否失去生命值\n
+            'died': bool - 是否死亡（這一次受傷）\n
+            'game_over': bool - 是否遊戲結束（沒有生命次數）\n
+        }\n
         """
         self.health -= damage
+        result = {"health_lost": True, "died": False, "game_over": False}
+
         if self.health <= 0:
             self.health = 0
             self.is_alive = False
-            return True  # 玩家死亡
-        return False  # 玩家還活著
+            self.is_dead = True
+            self.death_time = time.time()
+            result["died"] = True
+
+            # 減少生命次數
+            self.lives -= 1
+            print(f"💀 玩家死亡！剩餘生命次數: {self.lives}")
+
+            # 檢查是否遊戲結束
+            if self.lives <= 0:
+                result["game_over"] = True
+                print("💀 遊戲結束！沒有剩餘生命次數")
+
+        return result
 
     def get_pending_bullet(self):
         """
@@ -766,6 +819,10 @@ class Player(GameObject):
             f"生命值: {self.health}/{self.max_health}", True, WHITE
         )
         screen.blit(health_text, (bar_x + 220, bar_y + 5))  # 向右移動避免重疊
+
+        # 繪製生命次數指示
+        lives_text = font.render(f"生命: {self.lives}", True, WHITE)
+        screen.blit(lives_text, (bar_x, bar_y - 30))  # 在血量條上方顯示
 
     def draw_bullet_ui(self, screen):
         """

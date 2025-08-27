@@ -46,6 +46,11 @@ WALL_JUMP_STRENGTH = -17  # 增強爬牆跳
 WALL_JUMP_PUSH = 12
 DOUBLE_JUMP_STRENGTH = -15  # 增強二段跳
 
+# 玩家死亡設定
+PLAYER_LIVES = 3  # 玩家總生命次數
+DEATH_RESPAWN_DELAY = 1.0  # 死亡後重生延遲時間（秒）
+GAME_OVER_DELAY = 2.0  # 進入遊戲結束畫面的延遲時間（秒）
+
 ######################武器與子彈設定######################
 
 # 槍械基本設定
@@ -170,6 +175,19 @@ BULLET_UI_Y = 50
 # 分數顯示
 SCORE_FONT_SIZE = 36
 SCORE_COLOR = WHITE
+
+# 遊戲結束介面設定
+GAME_OVER_TITLE_COLOR = RED
+GAME_OVER_TEXT_COLOR = WHITE
+GAME_OVER_RETRY_COLOR = YELLOW
+GAME_OVER_BG_COLOR = BLACK
+
+# 死亡畫面文字內容
+DEATH_TITLE_TEXT = "💀 遊戲結束"
+DEATH_RETRY_TEXT = "按 R 重新開始"
+DEATH_QUIT_TEXT = "按 ESC 離開遊戲"
+DEATH_LIVES_TEXT = "剩餘生命"
+DEATH_FINAL_SCORE_TEXT = "最終分數"
 
 ######################字體設定######################
 

@@ -2,10 +2,6 @@
 mode: agent
 ---
 
----
-
-## mode: agent
-
 # 清理專案並推送到 GitHub
 
 ## 任務概述

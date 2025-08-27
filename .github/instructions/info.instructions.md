@@ -12,6 +12,21 @@ applyTo: "**"
 
 - 不要建立虛擬環境
 
+### 檔案架構與專案組織
+
+- **檔案架構原則**：使用好維護、好理解的檔案架構進行建立
+  - 模組化設計，將相關功能放在同一個目錄
+  - 使用清晰的目錄命名，一看就知道裡面放什麼
+  - 避免過深的巢狀結構，保持簡潔
+- **測試政策**：功能可以進行測試，但測試完畢後必須移除測試檔案
+  - 開發過程中可以建立臨時測試檔案進行功能驗證
+  - 測試完成後務必刪除所有測試相關檔案
+  - 不保留永久性的測試檔案或測試目錄
+- **文件政策**：除了 README.md 檔案之外，其他檔案不需要額外的說明文件
+  - 程式碼本身應該具有自我說明性
+  - 透過良好的命名和註解讓程式碼易於理解
+  - 避免建立多餘的文件檔案
+
 ### 命名規則
 
 - **變數名稱**：使用小寫字母配合底線分隔（snake_case）
@@ -169,69 +184,3 @@ applyTo: "**"
 - **設計模式**：如果用了特別的設計方法，要用簡單的話解釋
 
 #### 範例：完整註解的函數
-
-```python
-def calculate_ball_bounce_angle(self, collision_object, collision_point):
-    """
-    計算球碰撞後的反彈角度 - 物理引擎核心算法\n
-    \n
-    此方法實現彈性碰撞的物理計算，考慮：\n
-    1. 入射角度和法線向量\n
-    2. 物體表面的摩擦係數\n
-    3. 能量損失和速度衰減\n
-    \n
-    參數:\n
-    collision_object (GameObject): 碰撞目標物件，必須有 surface_normal 屬性\n
-    collision_point (tuple): 碰撞點座標 (x, y)，座標系原點為螢幕左上角\n
-    \n
-    回傳:\n
-    tuple: (new_velocity_x, new_velocity_y) 新的速度向量\n
-    \n
-    物理公式:\n
-    - 反射向量 = 入射向量 - 2 * (入射向量 · 法線) * 法線\n
-    - 摩擦力 = μ * 法向力 * 接觸時間\n
-    - 能量損失 = 0.95 * 原始動能（模擬非完全彈性碰撞）\n
-    \n
-    異常情況:\n
-    - 如果碰撞物件無 surface_normal 屬性，使用預設垂直法線\n
-    - 速度過小時設定最小值，避免球靜止\n
-    """
-    try:
-        # 獲取碰撞物件的表面法線向量，預設為垂直向上
-        normal = getattr(collision_object, 'surface_normal', (0, -1))
-
-        # 計算入射角度（當前速度向量與法線的夾角）
-        incident_angle = math.atan2(self.velocity_y, self.velocity_x)
-
-        # 計算法線角度
-        normal_angle = math.atan2(normal[1], normal[0])
-
-        # 應用反射定律：出射角 = 入射角（相對於法線）
-        reflection_angle = 2 * normal_angle - incident_angle
-
-        # 計算碰撞前的速率（用於能量損失計算）
-        speed = math.sqrt(self.velocity_x**2 + self.velocity_y**2)
-
-        # 應用能量損失係數（模擬非完全彈性碰撞）
-        energy_retention = 0.95
-        new_speed = speed * energy_retention
-
-        # 計算新的速度分量
-        new_velocity_x = new_speed * math.cos(reflection_angle)
-        new_velocity_y = new_speed * math.sin(reflection_angle)
-
-        # 防止速度過小導致球停止移動
-        min_speed = 2.0
-        if new_speed < min_speed:
-            # 保持方向，但提升到最小速度
-            scale_factor = min_speed / new_speed
-            new_velocity_x *= scale_factor
-            new_velocity_y *= scale_factor
-
-        return (new_velocity_x, new_velocity_y)
-
-    except (AttributeError, ZeroDivisionError) as e:
-        # 碰撞計算失敗時的降級處理：簡單速度反轉
-        print(f"碰撞角度計算失敗，使用簡化處理: {e}")
-        return (-self.velocity_x * 0.9, -self.velocity_y * 0.9)
-```
