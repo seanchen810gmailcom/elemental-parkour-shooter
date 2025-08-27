@@ -3,8 +3,14 @@ import pygame
 import math
 import random
 import time
-from ..config import *
-from ..core.game_objects import GameObject, StatusEffect
+
+# 支援直接執行和模組執行兩種方式
+try:
+    from ..config import *
+    from ..core.game_objects import GameObject, StatusEffect
+except ImportError:
+    from src.config import *
+    from src.core.game_objects import GameObject, StatusEffect
 
 ######################基礎怪物類別######################
 
@@ -443,12 +449,9 @@ class Monster(GameObject):
             health_rect = pygame.Rect(bar_x, bar_y, health_width, bar_height)
             pygame.draw.rect(screen, GREEN, health_rect)
 
-            # 邊框
-            pygame.draw.rect(screen, WHITE, bg_rect, 1)
-
         # 繪製方向指示（小箭頭）
-        center_x = self.x + self.width // 2
-        center_y = self.y + self.height // 2
+        center_x = screen_x + self.width // 2
+        center_y = screen_y + self.height // 2
 
         if self.direction > 0:
             # 面向右邊的箭頭

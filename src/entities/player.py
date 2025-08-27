@@ -1,8 +1,16 @@
 ######################載入套件######################
 import pygame
 import time
-from ..config import *
-from ..core.game_objects import GameObject, StatusEffect
+import math
+import random
+
+# 嘗試相對導入，如果失敗則使用絕對導入
+try:
+    from ..config import *
+    from ..core.game_objects import GameObject, StatusEffect
+except ImportError:
+    from src.config import *
+    from src.core.game_objects import GameObject, StatusEffect
 
 ######################玩家類別######################
 
@@ -51,10 +59,49 @@ class Player(GameObject):
         self.safe_position_timer = 0  # 安全位置更新計時器
 
         # 戰鬥相關屬性
-        self.current_bullet_type = "water"  # 當前子彈類型
+        self.current_weapon = (
+            "machine_gun"  # 當前武器類型：machine_gun, assault_rifle, shotgun, sniper
+        )
         self.last_shot_time = 0  # 上次射擊時間
         self.last_melee_time = 0  # 上次近戰時間
         self.facing_direction = 1  # 面向方向 (1: 右, -1: 左)
+
+        # 武器屬性配置
+        self.weapon_configs = {
+            "machine_gun": {
+                "name": "機關槍",
+                "fire_rate": 0.1,  # 發射率超級快
+                "damage": 8,  # 大幅降低攻擊力從15到8
+                "bullet_speed": 20,
+                "spread": 0,  # 散布角度
+                "bullets_per_shot": 1,
+            },
+            "assault_rifle": {
+                "name": "衝鋒槍",
+                "fire_rate": 0.4,  # 發射率不高
+                "damage": 40,  # 攻擊力高
+                "bullet_speed": 25,
+                "spread": 0,
+                "bullets_per_shot": 1,
+            },
+            "shotgun": {
+                "name": "散彈槍",
+                "fire_rate": 0.8,  # 發射率中等
+                "damage": 25,  # 攻擊力中等
+                "bullet_speed": 18,
+                "spread": 1.0,  # 60度散射範圍
+                "bullets_per_shot": 5,  # 一次射出5發
+            },
+            "sniper": {
+                "name": "狙擊槍",
+                "fire_rate": 1.5,  # 發射率低
+                "damage": 100,  # 攻擊力超高
+                "bullet_speed": 35,
+                "spread": 0,
+                "bullets_per_shot": 1,
+                "has_crosshair": True,  # 有準心
+            },
+        }
 
         # 狀態效果管理
         self.status_effects = []
@@ -71,13 +118,15 @@ class Player(GameObject):
         # 射擊請求佇列
         self.pending_bullet = None
 
-    def handle_input(self, keys, mouse_buttons):
+    def handle_input(self, keys, mouse_buttons, camera_x=0, camera_y=0):
         """
         處理玩家輸入 - 將鍵盤滑鼠輸入轉換為動作\n
         \n
         參數:\n
         keys (dict): pygame.key.get_pressed() 的結果\n
         mouse_buttons (tuple): pygame.mouse.get_pressed() 的結果\n
+        camera_x (int): 攝影機 x 偏移，用於射擊方向計算\n
+        camera_y (int): 攝影機 y 偏移，用於射擊方向計算\n
         \n
         處理的輸入:\n
         - 移動按鍵：更新 keys_pressed 狀態\n
@@ -96,9 +145,9 @@ class Player(GameObject):
             self.jump()
         self.keys_pressed["jump"] = jump_input
 
-        # 射擊輸入（滑鼠左鍵）
-        if mouse_buttons[0] and not self.keys_pressed["shoot"]:
-            bullet_info = self.shoot()
+        # 射擊輸入（滑鼠左鍵）- 支援連續射擊，現在傳遞攝影機偏移
+        if mouse_buttons[0]:  # 按住滑鼠左鍵連續射擊
+            bullet_info = self.shoot(camera_x, camera_y)
             if bullet_info:
                 self.pending_bullet = bullet_info
         self.keys_pressed["shoot"] = mouse_buttons[0]
@@ -108,15 +157,15 @@ class Player(GameObject):
             self.melee_attack()
         self.keys_pressed["melee"] = mouse_buttons[2]
 
-        # 子彈類型切換
+        # 武器切換
         if keys[pygame.K_1]:
-            self.current_bullet_type = "water"
+            self.current_weapon = "machine_gun"
         elif keys[pygame.K_2]:
-            self.current_bullet_type = "ice"
+            self.current_weapon = "assault_rifle"
         elif keys[pygame.K_3]:
-            self.current_bullet_type = "thunder"
+            self.current_weapon = "shotgun"
         elif keys[pygame.K_4]:
-            self.current_bullet_type = "fire"
+            self.current_weapon = "sniper"
 
     def jump(self):
         """
@@ -147,37 +196,50 @@ class Player(GameObject):
             self.is_wall_sliding = False
             self.can_double_jump = True  # 爬牆跳後重新獲得二段跳
 
-    def shoot(self):
+    def shoot(self, camera_x=0, camera_y=0):
         """
-        射擊動作 - 發射當前類型的子彈\n
+        射擊動作 - 根據當前武器類型發射子彈\n
         \n
-        檢查射擊冷卻時間，如果可以射擊就：\n
-        1. 計算子彈發射方向（根據滑鼠位置）\n
-        2. 建立對應屬性的子彈物件\n
-        3. 更新上次射擊時間\n
+        支援四種武器：\n
+        1. 機關槍：發射率超級快，攻擊力低，有 ±10 度隨機誤差\n
+        2. 衝鋒槍：攻擊力高，發射率低，有 ±10 度隨機誤差\n
+        3. 散彈槍：一次射出多發，60度散射，每發有 ±10 度隨機誤差\n
+        4. 狙擊槍：攻擊力超高，有準心顯示，完全準確無誤差\n
+        \n
+        精度系統：\n
+        - 狙擊槍：準心完全對準滑鼠位置，無任何隨機誤差\n
+        - 其他武器：在瞄準方向基礎上添加 ±10 度的隨機誤差\n
+        - 散彈槍：除了本身的散射外，每發子彈還有額外的隨機誤差\n
+        \n
+        參數:\n
+        camera_x (int): 攝影機 x 偏移，用於正確計算滑鼠世界座標\n
+        camera_y (int): 攝影機 y 偏移，用於正確計算滑鼠世界座標\n
         \n
         回傳:\n
-        Bullet or None: 成功射擊回傳子彈物件，冷卻中回傳 None\n
+        list or None: 成功射擊回傳子彈列表，冷卻中回傳 None\n
         """
         current_time = time.time()
+        weapon_config = self.weapon_configs[self.current_weapon]
 
         # 檢查射擊冷卻時間
-        if current_time - self.last_shot_time < FIRE_RATE:
+        if current_time - self.last_shot_time < weapon_config["fire_rate"]:
             return None  # 還在冷卻中，無法射擊
 
         # 獲取滑鼠位置來決定射擊方向
         mouse_x, mouse_y = pygame.mouse.get_pos()
 
-        # 計算從玩家中心到滑鼠的方向向量
+        # 將滑鼠的螢幕座標轉換為世界座標
+        world_mouse_x = mouse_x + camera_x
+        world_mouse_y = mouse_y + camera_y
+
+        # 計算從玩家中心到滑鼠世界位置的方向向量
         player_center_x = self.x + self.width // 2
         player_center_y = self.y + self.height // 2
 
-        direction_x = mouse_x - player_center_x
-        direction_y = mouse_y - player_center_y
+        direction_x = world_mouse_x - player_center_x
+        direction_y = world_mouse_y - player_center_y
 
         # 正規化方向向量（讓長度變成1）
-        import math
-
         distance = math.sqrt(direction_x**2 + direction_y**2)
         if distance > 0:
             direction_x /= distance
@@ -193,18 +255,47 @@ class Player(GameObject):
         elif direction_x < 0:
             self.facing_direction = -1
 
-        # 建立子彈物件（之後會在 weapon.py 中實作）
-        # 暫時只記錄射擊時間
-        self.last_shot_time = current_time
+        # 根據武器類型創建子彈
+        bullets = []
+        bullets_per_shot = weapon_config["bullets_per_shot"]
+        spread = weapon_config.get("spread", 0)
 
-        # 回傳子彈資訊，讓主遊戲迴圈處理
-        return {
-            "type": self.current_bullet_type,
-            "start_x": player_center_x,
-            "start_y": player_center_y,
-            "direction_x": direction_x,
-            "direction_y": direction_y,
-        }
+        for i in range(bullets_per_shot):
+            # 計算散射角度
+            if bullets_per_shot > 1:
+                # 散彈槍：在-30到+30度之間均勻分佈
+                angle_offset = (i / (bullets_per_shot - 1) - 0.5) * spread
+            else:
+                angle_offset = 0
+
+            # 計算最終射擊方向
+            base_angle = math.atan2(direction_y, direction_x)
+
+            # 根據武器類型添加隨機誤差
+            if self.current_weapon == "sniper":
+                # 狙擊槍：完全準確，不添加任何誤差
+                final_angle = base_angle + angle_offset
+            else:
+                # 其他武器：添加 ±10 度的隨機誤差
+                random_error = random.uniform(-10, 10) * (math.pi / 180)  # 轉換為弧度
+                final_angle = base_angle + angle_offset + random_error
+
+            final_direction_x = math.cos(final_angle)
+            final_direction_y = math.sin(final_angle)
+
+            bullet_info = {
+                "type": self.current_weapon,
+                "start_x": player_center_x,
+                "start_y": player_center_y,
+                "direction_x": final_direction_x,
+                "direction_y": final_direction_y,
+                "damage": weapon_config["damage"],
+                "speed": weapon_config["bullet_speed"],
+            }
+            bullets.append(bullet_info)
+
+        self.last_shot_time = current_time
+        return bullets
 
     def melee_attack(self):
         """
@@ -450,7 +541,7 @@ class Player(GameObject):
         取得待發射的子彈並清除
 
         回傳:
-        dict or None: 子彈資訊或 None
+        list or None: 子彈資訊列表或 None
         """
         bullet_info = self.pending_bullet
         self.pending_bullet = None
@@ -522,7 +613,47 @@ class Player(GameObject):
 
         pygame.draw.polygon(screen, WHITE, triangle_points)
 
-        # 移除滑牆特殊效果的白色邊框
+        # 移除滑牆白色邊框特效，保持簡潔外觀
+
+    def draw_crosshair(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製狙擊槍準心 - 顯示玩家準心位置\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 要繪製到的螢幕表面\n
+        camera_x (int): 攝影機 x 偏移\n
+        camera_y (int): 攝影機 y 偏移\n
+        """
+        if self.current_weapon != "sniper":
+            return
+
+        # 獲取滑鼠位置
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+
+        # 繪製準心
+        crosshair_size = 20
+        crosshair_color = (255, 0, 0)  # 紅色準心
+
+        # 水平線
+        pygame.draw.line(
+            screen,
+            crosshair_color,
+            (mouse_x - crosshair_size, mouse_y),
+            (mouse_x + crosshair_size, mouse_y),
+            2,
+        )
+
+        # 垂直線
+        pygame.draw.line(
+            screen,
+            crosshair_color,
+            (mouse_x, mouse_y - crosshair_size),
+            (mouse_x, mouse_y + crosshair_size),
+            2,
+        )
+
+        # 中心點
+        pygame.draw.circle(screen, crosshair_color, (mouse_x, mouse_y), 3, 1)
 
     def draw_health_bar(self, screen):
         """
@@ -550,42 +681,48 @@ class Player(GameObject):
         # 繪製邊框
         pygame.draw.rect(screen, WHITE, bg_rect, 2)
 
-        # 繪製生命值文字
+        # 繪製生命值文字（調整位置避免重疊）
         font = get_chinese_font(FONT_SIZE_NORMAL)
         health_text = font.render(
             f"生命值: {self.health}/{self.max_health}", True, WHITE
         )
-        screen.blit(health_text, (bar_x, bar_y - 25))
+        screen.blit(health_text, (bar_x + 220, bar_y + 5))  # 向右移動避免重疊
 
     def draw_bullet_ui(self, screen):
         """
-        繪製子彈類型選擇介面 - 顯示當前子彈和可切換的類型\n
+        繪製武器選擇介面 - 顯示當前武器和可切換的類型\n
         \n
         參數:\n
         screen (pygame.Surface): 要繪製到的螢幕表面\n
         """
-        bullet_types = ["water", "ice", "thunder", "fire"]
-        bullet_colors = {
-            "water": WATER_BULLET_COLOR,
-            "ice": ICE_BULLET_COLOR,
-            "thunder": THUNDER_BULLET_COLOR,
-            "fire": FIRE_BULLET_COLOR,
+        weapons = ["machine_gun", "assault_rifle", "shotgun", "sniper"]
+        weapon_colors = {
+            "machine_gun": (255, 165, 0),  # 橘色
+            "assault_rifle": (128, 0, 128),  # 紫色
+            "shotgun": (255, 0, 0),  # 紅色
+            "sniper": (0, 255, 255),  # 青色
+        }
+        weapon_names = {
+            "machine_gun": "機關槍",
+            "assault_rifle": "衝鋒槍",
+            "shotgun": "散彈槍",
+            "sniper": "狙擊槍",
         }
 
-        start_x = SCREEN_WIDTH - 250
+        start_x = SCREEN_WIDTH - 300
         start_y = BULLET_UI_Y
 
-        for i, bullet_type in enumerate(bullet_types):
+        for i, weapon in enumerate(weapons):
             # 計算位置
             ui_x = start_x + i * BULLET_UI_SPACING
             ui_y = start_y
 
-            # 繪製子彈圖示
+            # 繪製武器圖示
             ui_rect = pygame.Rect(ui_x, ui_y, BULLET_UI_SIZE, BULLET_UI_SIZE)
-            pygame.draw.rect(screen, bullet_colors[bullet_type], ui_rect)
+            pygame.draw.rect(screen, weapon_colors[weapon], ui_rect)
 
-            # 如果是當前選中的子彈類型，畫更粗的白色邊框
-            if bullet_type == self.current_bullet_type:
+            # 如果是當前選中的武器，畫更粗的白色邊框
+            if weapon == self.current_weapon:
                 pygame.draw.rect(screen, WHITE, ui_rect, 4)
 
             # 繪製按鍵提示
@@ -595,3 +732,10 @@ class Player(GameObject):
                 center=(ui_x + BULLET_UI_SIZE // 2, ui_y + BULLET_UI_SIZE + 15)
             )
             screen.blit(key_text, text_rect)
+
+            # 繪製武器名稱
+            name_text = font.render(weapon_names[weapon], True, WHITE)
+            name_rect = name_text.get_rect(
+                center=(ui_x + BULLET_UI_SIZE // 2, ui_y + BULLET_UI_SIZE + 35)
+            )
+            screen.blit(name_text, name_rect)

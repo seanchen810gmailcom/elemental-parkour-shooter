@@ -3,10 +3,18 @@ import pygame
 import random
 import math
 import time
-from ..config import *
-from ..core.game_objects import *
-from ..entities.monsters import Monster
-from ..core.element_system import ElementSystem
+
+# 支援直接執行和模組執行兩種方式
+try:
+    from ..config import *
+    from ..core.game_objects import *
+    from ..entities.monsters import Monster
+    from ..core.element_system import ElementSystem
+except ImportError:
+    from src.config import *
+    from src.core.game_objects import *
+    from src.entities.monsters import Monster
+    from src.core.element_system import ElementSystem
 
 ######################Boss基礎類別######################
 

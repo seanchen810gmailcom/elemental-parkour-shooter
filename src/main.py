@@ -2,13 +2,30 @@
 import pygame
 import sys
 import time
-from .config import *
-from .core.game_objects import *
-from .entities.player import Player
-from .entities.weapon import WeaponManager
-from .systems.monster_manager import MonsterManager
-from .systems.damage_display import DamageDisplayManager
-from .systems.level_system import LevelManager
+import os
+
+# 添加父目錄到路徑，支援直接執行
+if __name__ == "__main__":
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 嘗試相對導入，如果失敗則使用絕對導入
+try:
+    from .config import *
+    from .core.game_objects import *
+    from .entities.player import Player
+    from .entities.weapon import WeaponManager
+    from .systems.monster_manager import MonsterManager
+    from .systems.damage_display import DamageDisplayManager
+    from .systems.level_system import LevelManager
+except ImportError:
+    # 直接執行時使用絕對導入
+    from src.config import *
+    from src.core.game_objects import *
+    from src.entities.player import Player
+    from src.entities.weapon import WeaponManager
+    from src.systems.monster_manager import MonsterManager
+    from src.systems.damage_display import DamageDisplayManager
+    from src.systems.level_system import LevelManager
 
 ######################遊戲主類別######################
 
@@ -113,7 +130,7 @@ class ElementalParkourShooter:
         if self.game_state == "playing" and self.player.is_alive:
             keys = pygame.key.get_pressed()
             mouse_buttons = pygame.mouse.get_pressed()
-            self.player.handle_input(keys, mouse_buttons)
+            self.player.handle_input(keys, mouse_buttons, self.camera_x, self.camera_y)
 
     def update(self):
         """
@@ -187,10 +204,27 @@ class ElementalParkourShooter:
             if monster_update_result["monsters_killed"] > 0:
                 self.score += monster_update_result["monsters_killed"] * 50
 
+            # 檢查Boss生成
+            if monster_update_result["boss_spawned"]:
+                print("🔥 強大的Boss出現了！")
+
+            # 檢查Boss是否被擊敗
+            if monster_update_result["boss_defeated"]:
+                # Boss被擊敗後在Boss位置生成星星
+                if self.monster_manager.boss:
+                    self.level_manager.star_x = self.monster_manager.boss.x
+                    self.level_manager.star_y = self.monster_manager.boss.y - 50
+                    self.level_manager.star_collected = False
+                    print("🌟 Boss被擊敗！勝利星星出現了！")
+
             # Boss系統移除，簡化遊戲體驗
 
             # 更新武器系統（子彈飛行等）
             all_targets = self.monster_manager.monsters[:]  # 複製怪物列表
+
+            # 添加Boss作為目標（如果存在）
+            if self.monster_manager.boss:
+                all_targets.append(self.monster_manager.boss)
 
             collision_results = self.weapon_manager.update(targets=all_targets)
 
@@ -278,37 +312,19 @@ class ElementalParkourShooter:
             if self.player.is_alive:
                 self.player.draw(self.screen, self.camera_x, self.camera_y)
 
+            # 繪製狙擊槍準心（在最上層）
+            self.player.draw_crosshair(self.screen, self.camera_x, self.camera_y)
+
             # 繪製 UI 元素（固定在螢幕上，不受攝影機影響）
             self.player.draw_health_bar(self.screen)
             self.player.draw_bullet_ui(self.screen)
 
-            # 繪製簡化的遊戲資訊（只顯示分數）
-            info_texts = [
-                f"分數: {self.score}",
-            ]
-
-            # 將分數顯示在右上角，簡潔顯示
-            for i, text in enumerate(info_texts):
-                rendered_text = self.font.render(text, True, WHITE)
-                text_width = rendered_text.get_width()
-                self.screen.blit(
-                    rendered_text, (SCREEN_WIDTH - text_width - 10, 10 + i * 30)
-                )
-
-            # 繪製控制說明（移動到左下角）
-            instructions = [
-                "WASD/方向鍵: 移動",
-                "W/空格/上鍵: 跳躍",
-                "滑鼠左鍵: 射擊",
-                "滑鼠右鍵: 近戰攻擊",
-                "1234: 切換子彈類型",
-                "ESC: 離開遊戲",
-            ]
-
-            font_small = get_chinese_font(FONT_SIZE_SMALL)
-            for i, instruction in enumerate(instructions):
-                text = font_small.render(instruction, True, WHITE)
-                self.screen.blit(text, (10, SCREEN_HEIGHT - 140 + i * 22))
+            # 繪製分數（移動到右上角，避免與血條重疊）
+            score_font = get_chinese_font(FONT_SIZE_MEDIUM)
+            score_text = score_font.render(f"分數: {self.score}", True, WHITE)
+            score_rect = score_text.get_rect()
+            score_rect.topright = (SCREEN_WIDTH - 20, 20)  # 右上角位置
+            self.screen.blit(score_text, score_rect)
 
         elif self.game_state == "victory":
             # 繪製勝利畫面

@@ -2,7 +2,12 @@
 import pygame
 import math
 import time
-from ..config import *
+
+# 支援直接執行和模組執行兩種方式
+try:
+    from ..config import *
+except ImportError:
+    from src.config import *
 
 ######################基礎物件類別######################
 

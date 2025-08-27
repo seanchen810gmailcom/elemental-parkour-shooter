@@ -2,9 +2,14 @@
 import pygame
 import math
 import time
-from ..config import *
-from ..core.game_objects import GameObject
-from ..core.element_system import ElementSystem
+
+# 支援直接執行和模組執行兩種方式
+try:
+    from ..config import *
+    from ..core.game_objects import GameObject
+except ImportError:
+    from src.config import *
+    from src.core.game_objects import GameObject
 
 ######################子彈類別######################
 
@@ -28,15 +33,15 @@ class Bullet(GameObject):
     """
 
     def __init__(self, x, y, direction_x, direction_y, bullet_type):
-        # 根據子彈類型設定顏色
-        bullet_colors = {
-            "water": WATER_BULLET_COLOR,
-            "ice": ICE_BULLET_COLOR,
-            "thunder": THUNDER_BULLET_COLOR,
-            "fire": FIRE_BULLET_COLOR,
+        # 根據武器類型設定顏色
+        weapon_colors = {
+            "machine_gun": (255, 165, 0),  # 橘色
+            "assault_rifle": (128, 0, 128),  # 紫色
+            "shotgun": (255, 0, 0),  # 紅色
+            "sniper": (0, 255, 255),  # 青色
         }
 
-        color = bullet_colors.get(bullet_type, WHITE)
+        color = weapon_colors.get(bullet_type, WHITE)
         super().__init__(x, y, BULLET_SIZE, BULLET_SIZE, color)
 
         # 移動屬性
@@ -50,25 +55,30 @@ class Bullet(GameObject):
 
         # 狀態管理
         self.is_active = True
-        self.max_distance = GUN_RANGE
+        self.max_distance = 9999  # 讓子彈飛得超級遠，永遠不會因為距離而消失
         self.distance_traveled = 0
 
         # 記錄初始位置（用來計算飛行距離）
         self.start_x = x
         self.start_y = y
 
+        # 新增武器類型支援
+        self.weapon_type = (
+            bullet_type  # 武器類型：machine_gun, assault_rifle, shotgun, sniper
+        )
+
     def get_base_damage(self):
         """
         獲取子彈的基礎傷害值\n
         \n
         回傳:\n
-        int: 根據子彈類型回傳對應的基礎傷害\n
+        int: 根據武器類型回傳對應的基礎傷害\n
         """
         damage_values = {
-            "water": WATER_DAMAGE,
-            "ice": ICE_DAMAGE,
-            "thunder": THUNDER_DAMAGE,
-            "fire": FIRE_DAMAGE,
+            "machine_gun": 15,  # 機關槍：攻擊力低
+            "assault_rifle": 40,  # 衝鋒槍：攻擊力高
+            "shotgun": 25,  # 散彈槍：攻擊力中等
+            "sniper": 100,  # 狙擊槍：攻擊力超高
         }
         return damage_values.get(self.bullet_type, 20)
 
@@ -94,25 +104,18 @@ class Bullet(GameObject):
         distance_y = self.y - self.start_y
         self.distance_traveled = math.sqrt(distance_x**2 + distance_y**2)
 
-        # 檢查是否超出最大射程
+        # 檢查是否超出最大射程（已設為9999，基本不會觸發）
         if self.distance_traveled > self.max_distance:
             self.is_active = False
 
-        # 檢查是否飛出螢幕邊界
-        if (
-            self.x < -self.width
-            or self.x > SCREEN_WIDTH
-            or self.y < -self.height
-            or self.y > SCREEN_HEIGHT
-        ):
-            self.is_active = False
+        # 移除螢幕邊界檢查，讓子彈永遠飛行
 
         # 更新碰撞矩形
         self.update_rect()
 
     def get_damage_against_target(self, target_type):
         """
-        計算對特定目標的傷害值 - 使用新的屬性系統\n
+        計算對特定目標的傷害值 - 簡化版本，不使用元素系統\n
         \n
         參數:\n
         target_type (str): 目標怪物類型\n
@@ -120,19 +123,17 @@ class Bullet(GameObject):
         回傳:\n
         tuple: (damage, status_effect_info)\n
         """
-        # 使用屬性系統計算傷害
-        final_damage = ElementSystem.calculate_damage(
-            self.damage, self.bullet_type, target_type
-        )
+        # 直接返回基礎傷害，不考慮元素剋制
+        final_damage = self.damage
 
-        # 獲取狀態效果
-        status_effect = ElementSystem.get_status_effect(self.bullet_type, target_type)
+        # 不使用狀態效果
+        status_effect = None
 
         return final_damage, status_effect
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """
-        繪製子彈 - 根據屬性類型使用不同視覺效果\n
+        繪製子彈 - 根據武器類型使用不同視覺效果\n
         \n
         參數:\n
         screen (pygame.Surface): 要繪製到的螢幕表面\n
@@ -140,13 +141,11 @@ class Bullet(GameObject):
         camera_y (int): 攝影機 y 偏移\n
         \n
         繪製方式：\n
-        - 水彈：圓形\n
-        - 冰彈：菱形\n
-        - 雷彈：閃電形狀（簡化為星形）\n
-        - 火彈：火焰形狀（三角形）\n
+        - 機關槍：小圓形\n
+        - 衝鋒槍：矩形\n
+        - 散彈槍：三角形\n
+        - 狙擊槍：大圓形\n
         """
-        # 計算螢幕位置
-        screen_x = self.x - camera_x
         # 計算螢幕位置
         screen_x = self.x - camera_x
         screen_y = self.y - camera_y
@@ -158,42 +157,17 @@ class Bullet(GameObject):
         center_y = int(screen_y + self.height // 2)
         radius = self.width // 2
 
-        if self.bullet_type == "water":
-            # 水彈：圓形
-            pygame.draw.circle(screen, self.color, (center_x, center_y), radius)
+        if self.bullet_type == "machine_gun":
+            # 機關槍：小圓形
+            pygame.draw.circle(screen, self.color, (center_x, center_y), radius // 2)
 
-        elif self.bullet_type == "ice":
-            # 冰彈：菱形
-            points = [
-                (center_x, center_y - radius),  # 上
-                (center_x + radius, center_y),  # 右
-                (center_x, center_y + radius),  # 下
-                (center_x - radius, center_y),  # 左
-            ]
-            pygame.draw.polygon(screen, self.color, points)
+        elif self.bullet_type == "assault_rifle":
+            # 衝鋒槍：矩形
+            bullet_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
+            pygame.draw.rect(screen, self.color, bullet_rect)
 
-        elif self.bullet_type == "thunder":
-            # 雷彈：星形（簡化的閃電）
-            outer_radius = radius
-            inner_radius = radius // 2
-            points = []
-
-            for i in range(8):  # 8個點的星形
-                angle = i * math.pi / 4
-                if i % 2 == 0:
-                    # 外圈的點
-                    x = center_x + outer_radius * math.cos(angle)
-                    y = center_y + outer_radius * math.sin(angle)
-                else:
-                    # 內圈的點
-                    x = center_x + inner_radius * math.cos(angle)
-                    y = center_y + inner_radius * math.sin(angle)
-                points.append((int(x), int(y)))
-
-            pygame.draw.polygon(screen, self.color, points)
-
-        elif self.bullet_type == "fire":
-            # 火彈：火焰形狀（三角形）
+        elif self.bullet_type == "shotgun":
+            # 散彈槍：三角形
             points = [
                 (center_x, center_y - radius),  # 頂點
                 (center_x - radius, center_y + radius),  # 左下
@@ -201,7 +175,11 @@ class Bullet(GameObject):
             ]
             pygame.draw.polygon(screen, self.color, points)
 
-        # 移除白色邊框以改善視覺效果
+        elif self.bullet_type == "sniper":
+            # 狙擊槍：大圓形
+            pygame.draw.circle(screen, self.color, (center_x, center_y), radius)
+            # 內圈顯示威力
+            pygame.draw.circle(screen, WHITE, (center_x, center_y), radius // 2)
 
 
 ######################武器管理器類別######################
@@ -226,24 +204,56 @@ class WeaponManager:
         根據玩家射擊資訊建立新子彈\n
         \n
         參數:\n
-        bullet_info (dict): 包含子彈資訊的字典\n
+        bullet_info (list or dict): 包含子彈資訊的字典或列表\n
         \n
         回傳:\n
-        Bullet: 新建立的子彈物件\n
+        list: 新建立的子彈物件列表\n
         """
         if bullet_info is None:
-            return None
+            return []
 
-        new_bullet = Bullet(
-            bullet_info["start_x"],
-            bullet_info["start_y"],
-            bullet_info["direction_x"],
-            bullet_info["direction_y"],
-            bullet_info["type"],
+        new_bullets = []
+
+        # 處理多發子彈的情況（散彈槍）
+        if isinstance(bullet_info, list):
+            for info in bullet_info:
+                bullet = self._create_single_bullet(info)
+                if bullet:
+                    new_bullets.append(bullet)
+        else:
+            # 單發子彈
+            bullet = self._create_single_bullet(bullet_info)
+            if bullet:
+                new_bullets.append(bullet)
+
+        self.bullets.extend(new_bullets)
+        return new_bullets
+
+    def _create_single_bullet(self, info):
+        """
+        創建單發子彈\n
+        \n
+        參數:\n
+        info (dict): 子彈資訊\n
+        \n
+        回傳:\n
+        Bullet: 子彈物件\n
+        """
+        bullet = Bullet(
+            info["start_x"],
+            info["start_y"],
+            info["direction_x"],
+            info["direction_y"],
+            info["type"],
         )
 
-        self.bullets.append(new_bullet)
-        return new_bullet
+        # 設定武器特定屬性
+        if "damage" in info:
+            bullet.damage = info["damage"]
+        if "speed" in info:
+            bullet.speed = info["speed"]
+
+        return bullet
 
     def handle_melee_attack(self, melee_info, targets):
         """

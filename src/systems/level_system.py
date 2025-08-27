@@ -2,8 +2,14 @@
 import pygame
 import random
 import math
-from ..config import *
-from ..core.game_objects import *
+
+# 支援直接執行和模組執行兩種方式
+try:
+    from ..config import *
+    from ..core.game_objects import *
+except ImportError:
+    from src.config import *
+    from src.core.game_objects import *
 
 ######################場景物件類別######################
 
@@ -437,8 +443,8 @@ class LevelManager:
         self.level_theme = "parkour"  # 跑酷主題
         self.platforms = []
         self.hazards = []  # 保留但不使用危險陷阱
-        self.level_width = SCREEN_WIDTH * 4  # 關卡寬度稍微增加
-        self.level_height = SCREEN_HEIGHT * 8  # 高度大幅增加，容納30層
+        self.level_width = SCREEN_WIDTH * 3  # 關卡寬度適中
+        self.level_height = SCREEN_HEIGHT * 15  # 高度大幅增加，容納30層
         self.total_levels = 30  # 總共30層
         self.star_collected = False  # 星星是否被收集
         self.star_x = 0  # 星星位置
@@ -468,20 +474,24 @@ class LevelManager:
         - 平台大小和間距適合跑酷\n
         - 從底部到頂部逐漸提升挑戰\n
         - 沒有會讓玩家死亡的陷阱\n
+        - 實心地板確保玩家不會掉下去死亡\n
         """
-        # 生成地面（第0層）
-        ground_platform = Platform(0, SCREEN_HEIGHT - 40, self.level_width, 40)
+        # 生成實心地面（加厚地板，覆蓋整個關卡底部）
+        ground_thickness = 80  # 地板厚度
+        ground_platform = Platform(
+            0, SCREEN_HEIGHT - ground_thickness, self.level_width, ground_thickness
+        )
         self.platforms.append(ground_platform)
 
         # 每層平台的基本設定
-        platforms_per_level = 4  # 每層4個平台
-        level_height_gap = 80  # 每層之間的高度差（調整為更容易跳躍的距離）
-        platform_min_width = 100  # 增加最小寬度讓平台更好跳上去
-        platform_max_width = 180  # 增加最大寬度
+        platforms_per_level = 3  # 每層3個平台
+        level_height_gap = 100  # 每層之間的高度差（減少到100像素，更容易攀爬）
+        platform_min_width = 120  # 增加最小寬度讓平台更好跳上去
+        platform_max_width = 200  # 增加最大寬度
 
         for level in range(1, self.total_levels + 1):
             # 計算這層的基準高度
-            base_y = SCREEN_HEIGHT - 40 - (level * level_height_gap)
+            base_y = SCREEN_HEIGHT - ground_thickness - (level * level_height_gap)
 
             # 每層的平台分佈在整個關卡寬度上
             section_width = self.level_width // platforms_per_level
@@ -493,11 +503,11 @@ class LevelManager:
 
                 # 平台位置隨機，但確保可達性（減少間距）
                 platform_x = random.randint(
-                    section_start + 10, section_end - platform_max_width - 10
+                    section_start + 20, section_end - platform_max_width - 20
                 )
 
-                # 平台高度變化更小，讓跳躍更容易
-                height_variation = random.randint(-10, 10)
+                # 平台高度變化很小，讓跳躍更容易
+                height_variation = random.randint(-15, 15)
                 platform_y = base_y + height_variation
 
                 # 平台寬度隨機
@@ -508,30 +518,35 @@ class LevelManager:
                     platform_x = self.level_width - platform_width
 
                 # 創建平台
-                platform = Platform(platform_x, platform_y, platform_width, 20)
+                platform = Platform(platform_x, platform_y, platform_width, 25)
                 self.platforms.append(platform)
 
-                # 為了增加趣味性，每層隨機增加一些小平台
-                if random.random() < 0.3:  # 30%機率
-                    extra_x = platform_x + platform_width + random.randint(60, 120)
-                    if extra_x + 60 < section_end:
-                        extra_platform = Platform(
-                            extra_x, platform_y + random.randint(-20, 20), 60, 15
-                        )
-                        self.platforms.append(extra_platform)
+            # 為了確保可達性，在每層額外增加一些小跳板
+            if level % 3 == 0:  # 每三層增加額外的輔助平台
+                extra_x = self.level_width // 2
+                extra_y = base_y - 30
+                extra_platform = Platform(extra_x - 40, extra_y, 80, 20)
+                self.platforms.append(extra_platform)
+
+        # 在左右兩側創建實心牆壁，防止玩家掉出關卡
+        left_wall = Platform(-50, 0, 50, self.level_height)
+        right_wall = Platform(self.level_width, 0, 50, self.level_height)
+        self.platforms.append(left_wall)
+        self.platforms.append(right_wall)
 
     def place_target_star(self):
         """
         在最高層放置閃閃發亮的目標星星\n
         """
-        # 星星放在最高層的中央平台上（使用新的高度差120）
-        star_y = SCREEN_HEIGHT - 40 - (self.total_levels * 120) - 50
+        # 星星放在最高層的中央平台上（使用新的高度差100）
+        ground_thickness = 80
+        star_y = SCREEN_HEIGHT - ground_thickness - (self.total_levels * 100) - 60
         self.star_x = self.level_width // 2
         self.star_y = star_y
         self.star_collected = False
 
         # 在星星下方創建一個特殊的大平台
-        star_platform = Platform(self.star_x - 100, star_y + 40, 200, 30)
+        star_platform = Platform(self.star_x - 150, star_y + 50, 300, 40)
         self.platforms.append(star_platform)
 
     def check_star_collision(self, player):

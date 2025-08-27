@@ -2,8 +2,14 @@
 import pygame
 import time
 import random
-from ..config import *
-from ..core.element_system import ElementSystem
+
+# 支援直接執行和模組執行兩種方式
+try:
+    from ..config import *
+    from ..core.element_system import ElementSystem
+except ImportError:
+    from src.config import *
+    from src.core.element_system import ElementSystem
 
 ######################傷害數字顯示系統######################
 
