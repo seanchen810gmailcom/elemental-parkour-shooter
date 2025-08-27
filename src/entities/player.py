@@ -71,7 +71,7 @@ class Player(GameObject):
             "machine_gun": {
                 "name": "機關槍",
                 "fire_rate": 0.1,  # 發射率超級快
-                "damage": 8,  # 大幅降低攻擊力從15到8
+                "damage": 8,  # 攻擊力降低從15到8
                 "bullet_speed": 20,
                 "spread": 0,  # 散布角度
                 "bullets_per_shot": 1,
@@ -95,7 +95,7 @@ class Player(GameObject):
             "sniper": {
                 "name": "狙擊槍",
                 "fire_rate": 1.5,  # 發射率低
-                "damage": 100,  # 攻擊力超高
+                "damage": 90,  # 攻擊力降低10%（100->90）
                 "bullet_speed": 35,
                 "spread": 0,
                 "bullets_per_shot": 1,
@@ -117,6 +117,11 @@ class Player(GameObject):
 
         # 射擊請求佇列
         self.pending_bullet = None
+
+        # 必殺技系統
+        self.last_ultimate_time = 0  # 上次使用必殺技的時間
+        self.ultimate_cooldown = 20.0  # 必殺技冷卻時間：20秒
+        self.pending_ultimate = None  # 待發射的必殺技
 
     def handle_input(self, keys, mouse_buttons, camera_x=0, camera_y=0):
         """
@@ -166,6 +171,13 @@ class Player(GameObject):
             self.current_weapon = "shotgun"
         elif keys[pygame.K_4]:
             self.current_weapon = "sniper"
+
+        # 必殺技（X鍵）
+        if keys[pygame.K_x] and not self.keys_pressed.get("ultimate", False):
+            ultimate_info = self.use_ultimate()
+            if ultimate_info:
+                self.pending_ultimate = ultimate_info
+        self.keys_pressed["ultimate"] = keys[pygame.K_x]
 
     def jump(self):
         """
@@ -333,6 +345,52 @@ class Player(GameObject):
             "direction": self.facing_direction,
         }
 
+    def use_ultimate(self):
+        """
+        使用必殺技 - 雷電追蹤攻擊\n
+        \n
+        必殺技特點：\n
+        1. 發射五顆自動追蹤子彈\n
+        2. 傷害與狙擊槍相同（100%）\n
+        3. 冷卻時間 20 秒\n
+        \n
+        回傳:\n
+        list or None: 五顆必殺技子彈資訊列表或 None（冷卻中）\n
+        """
+        current_time = time.time()
+
+        # 檢查冷卻時間
+        if current_time - self.last_ultimate_time < self.ultimate_cooldown:
+            return None  # 還在冷卻中
+
+        self.last_ultimate_time = current_time
+
+        # 必殺技傷害與狙擊槍相同（100%）
+        sniper_damage = self.weapon_configs["sniper"]["damage"]
+        ultimate_damage = sniper_damage  # 100%
+
+        # 創建五顆追蹤子彈
+        ultimate_bullets = []
+        player_center_x = self.x + self.width // 2
+        player_center_y = self.y + self.height // 2
+
+        for i in range(5):
+            # 每顆子彈有稍微不同的初始方向，避免重疊
+            angle_offset = (i - 2) * 0.2  # -0.4 到 +0.4 弧度的偏移
+
+            bullet_info = {
+                "type": "lightning_tracking",
+                "start_x": player_center_x,
+                "start_y": player_center_y,
+                "damage": ultimate_damage,
+                "speed": 20,  # 提升速度讓子彈更快到達目標
+                "angle_offset": angle_offset,  # 初始角度偏移
+                "bullet_id": i,  # 子彈編號，用於區分
+            }
+            ultimate_bullets.append(bullet_info)
+
+        return ultimate_bullets
+
     def update(self, platforms):
         """
         更新玩家狀態 - 每幀執行的更新邏輯\n
@@ -471,13 +529,11 @@ class Player(GameObject):
                         self.wall_direction = -1  # 左牆
                         self.velocity_y *= 0.7  # 減緩下降速度
 
-        # 螢幕邊界碰撞
+        # 螢幕邊界碰撞 - 移除右邊界限制，允許無限向右移動
         if self.x < 0:
             self.x = 0
             self.velocity_x = 0
-        elif self.x + self.width > SCREEN_WIDTH:
-            self.x = SCREEN_WIDTH - self.width
-            self.velocity_x = 0
+        # 移除右邊界檢查，允許玩家在無限寬度地圖中移動
 
     def update_status_effects(self):
         """
@@ -546,6 +602,29 @@ class Player(GameObject):
         bullet_info = self.pending_bullet
         self.pending_bullet = None
         return bullet_info
+
+    def get_pending_ultimate(self):
+        """
+        取得待發射的必殺技並清除
+
+        回傳:
+        dict or None: 必殺技資訊或 None
+        """
+        ultimate_info = self.pending_ultimate
+        self.pending_ultimate = None
+        return ultimate_info
+
+    def get_ultimate_cooldown_ratio(self):
+        """
+        取得必殺技冷卻比例
+
+        回傳:
+        float: 冷卻比例 (0.0-1.0)，1.0表示可以使用
+        """
+        current_time = time.time()
+        elapsed = current_time - self.last_ultimate_time
+        cooldown_ratio = min(1.0, elapsed / self.ultimate_cooldown)
+        return cooldown_ratio
 
     def heal(self, amount):
         """
@@ -739,3 +818,75 @@ class Player(GameObject):
                 center=(ui_x + BULLET_UI_SIZE // 2, ui_y + BULLET_UI_SIZE + 35)
             )
             screen.blit(name_text, name_rect)
+
+    def draw_ultimate_ui(self, screen):
+        """
+        繪製必殺技UI - 顯示冷卻狀態\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 要繪製到的螢幕表面\n
+        """
+        # 必殺技UI位置（在武器UI下方）
+        ui_x = SCREEN_WIDTH - 100
+        ui_y = BULLET_UI_Y + 100
+        ui_size = 60
+
+        # 獲取冷卻比例
+        cooldown_ratio = self.get_ultimate_cooldown_ratio()
+
+        # 繪製背景圓圈
+        center_x = ui_x + ui_size // 2
+        center_y = ui_y + ui_size // 2
+        pygame.draw.circle(screen, GRAY, (center_x, center_y), ui_size // 2, 3)
+
+        # 繪製冷卻進度
+        if cooldown_ratio < 1.0:
+            # 冷卻中 - 繪製進度扇形
+            start_angle = -math.pi / 2  # 從頂部開始
+            end_angle = start_angle + (2 * math.pi * cooldown_ratio)
+
+            # 繪製扇形（需要多個線段來模擬）
+            points = [(center_x, center_y)]
+            for i in range(int(cooldown_ratio * 32) + 1):  # 32個分段
+                angle = start_angle + (2 * math.pi * cooldown_ratio * i / 32)
+                x = center_x + math.cos(angle) * (ui_size // 2 - 3)
+                y = center_y + math.sin(angle) * (ui_size // 2 - 3)
+                points.append((x, y))
+
+            if len(points) > 2:
+                pygame.draw.polygon(screen, YELLOW, points)
+        else:
+            # 可使用 - 繪製完整圓圈
+            pygame.draw.circle(screen, YELLOW, (center_x, center_y), ui_size // 2 - 3)
+
+        # 繪製閃電符號
+        lightning_points = [
+            (center_x - 8, center_y - 12),
+            (center_x + 4, center_y - 4),
+            (center_x - 2, center_y),
+            (center_x + 8, center_y + 12),
+            (center_x - 4, center_y + 4),
+            (center_x + 2, center_y),
+        ]
+        pygame.draw.polygon(screen, WHITE, lightning_points)
+
+        # 繪製按鍵提示
+        font = get_chinese_font(FONT_SIZE_SMALL)
+        key_text = font.render("X", True, WHITE)
+        key_rect = key_text.get_rect(center=(center_x, center_y + ui_size // 2 + 15))
+        screen.blit(key_text, key_rect)
+
+        # 繪製冷卻時間文字
+        if cooldown_ratio < 1.0:
+            remaining_time = self.ultimate_cooldown * (1.0 - cooldown_ratio)
+            time_text = font.render(f"{remaining_time:.1f}s", True, WHITE)
+            time_rect = time_text.get_rect(
+                center=(center_x, center_y + ui_size // 2 + 35)
+            )
+            screen.blit(time_text, time_rect)
+        else:
+            ready_text = font.render("準備好！", True, GREEN)
+            ready_rect = ready_text.get_rect(
+                center=(center_x, center_y + ui_size // 2 + 35)
+            )
+            screen.blit(ready_text, ready_rect)

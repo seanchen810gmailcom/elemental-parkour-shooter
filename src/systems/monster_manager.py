@@ -6,10 +6,10 @@ import time
 # 支援直接執行和模組執行兩種方式
 try:
     from ..config import *
-    from ..entities.monsters import LavaMonster, WaterMonster, TornadoMonster
+    from ..entities.monsters import LavaMonster, WaterMonster
 except ImportError:
     from src.config import *
-    from src.entities.monsters import LavaMonster, WaterMonster, TornadoMonster
+    from src.entities.monsters import LavaMonster, WaterMonster
 
 ######################怪物管理器類別######################
 
@@ -35,9 +35,9 @@ class MonsterManager:
         self.boss_spawned = False  # Boss是否已生成
         self.boss = None  # Boss實例
 
-        # 怪物類型比例（隨波次調整）
-        self.monster_types = [LavaMonster, WaterMonster, TornadoMonster]
-        self.spawn_weights = [1, 1, 1]  # 各類型怪物的生成權重
+        # 怪物類型比例（隨波次調整）- 移除粉紫色怪物TornadoMonster
+        self.monster_types = [LavaMonster, WaterMonster]  # 只保留熔岩怪和水怪
+        self.spawn_weights = [1, 1]  # 各類型怪物的生成權重
 
     def get_ground_platform(self, platforms):
         """
@@ -223,15 +223,15 @@ class MonsterManager:
         # 創建Boss（使用LavaMonster作為基礎，但增強屬性）
         self.boss = LavaMonster(spawn_x, spawn_y)
 
-        # Boss血量是一般怪物的7倍
-        self.boss.max_health = LAVA_MONSTER_HEALTH * 7
+        # Boss血量增加三倍（從7倍改為3倍）
+        self.boss.max_health = LAVA_MONSTER_HEALTH * 3
         self.boss.health = self.boss.max_health
 
         # Boss攻擊力稍微提升
         self.boss.damage = LAVA_MONSTER_DAMAGE * 1.5
 
-        # Boss每3秒射擊一次
-        self.boss.lava_ball_cooldown = 3.0
+        # Boss射擊頻率更高（從3秒改為1.5秒）
+        self.boss.lava_ball_cooldown = 1.5
 
         # 設定Boss標記
         self.boss.is_boss = True
@@ -241,7 +241,7 @@ class MonsterManager:
         self.boss.home_platform = platform
 
         self.boss_spawned = True
-        print("🔥 Boss 岩漿怪王 出現！血量是一般怪物的7倍！")
+        print("🔥 Boss 岩漿怪王 出現！血量是一般怪物的3倍，能發射子彈攻擊！")
         return self.boss
 
     def update(self, player, platforms, dt):
@@ -276,9 +276,13 @@ class MonsterManager:
 
         # 檢查Boss是否被擊敗
         boss_defeated = False
+        boss_death_x = 0
+        boss_death_y = 0
         if self.boss and not self.boss.is_alive:
-            print("🎉 Boss已被擊敗！遊戲即將結束！")
+            print("🎉 Boss已被擊敗！勝利星星將出現！")
             boss_defeated = True
+            boss_death_x = self.boss.x
+            boss_death_y = self.boss.y
             self.boss = None
 
         # 更新生成計時器並嘗試生成新怪物（如果沒有Boss）
@@ -290,6 +294,8 @@ class MonsterManager:
             "monsters_killed": killed_this_frame,
             "boss_spawned": boss_spawned,
             "boss_defeated": boss_defeated,
+            "boss_death_x": boss_death_x,
+            "boss_death_y": boss_death_y,
             "new_monster": new_monster is not None,
             "total_killed": self.monsters_killed,
         }
@@ -359,7 +365,7 @@ class MonsterManager:
         self.wave_number = 1
         self.monsters_killed = 0
         self.max_monsters = 6
-        self.spawn_weights = [1, 1, 1]
+        self.spawn_weights = [1, 1]
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """

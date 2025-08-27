@@ -18,11 +18,12 @@ class Bullet(GameObject):
     """
     子彈類別 - 處理各種屬性子彈的飛行和效果\n
     \n
-    支援四種元素屬性子彈：\n
-    1. 水彈 - 對岩漿怪造成雙倍傷害\n
-    2. 冰彈 - 造成減速效果\n
-    3. 雷彈 - 對水怪造成雙倍傷害和麻痺效果\n
-    4. 火彈 - 高傷害但對岩漿怪抗性\n
+    支援四種武器子彈：\n
+    1. 機關槍 - 黑色圓形子彈\n
+    2. 衝鋒槍 - 紫色矩形子彈\n
+    3. 散彈槍 - 紅色三角形子彈\n
+    4. 狙擊槍 - 紅色大圓形子彈\n
+    5. 雷電必殺技 - 黃色追蹤子彈\n
     \n
     參數:\n
     x (float): 子彈初始 X 座標\n
@@ -35,10 +36,11 @@ class Bullet(GameObject):
     def __init__(self, x, y, direction_x, direction_y, bullet_type):
         # 根據武器類型設定顏色
         weapon_colors = {
-            "machine_gun": (255, 165, 0),  # 橘色
+            "machine_gun": BLACK,  # 機關槍子彈改為黑色
             "assault_rifle": (128, 0, 128),  # 紫色
             "shotgun": (255, 0, 0),  # 紅色
-            "sniper": (0, 255, 255),  # 青色
+            "sniper": (255, 0, 0),  # 狙擊槍子彈改為紅色
+            "lightning_tracking": YELLOW,  # 雷電追蹤子彈為黃色
         }
 
         color = weapon_colors.get(bullet_type, WHITE)
@@ -63,9 +65,14 @@ class Bullet(GameObject):
         self.start_y = y
 
         # 新增武器類型支援
-        self.weapon_type = (
-            bullet_type  # 武器類型：machine_gun, assault_rifle, shotgun, sniper
-        )
+        self.weapon_type = bullet_type  # 武器類型：machine_gun, assault_rifle, shotgun, sniper, lightning_tracking
+
+        # 雷電追蹤特殊屬性
+        if bullet_type == "lightning_tracking":
+            self.tracking_target = None  # 追蹤目標
+            self.tracking_range = 300  # 追蹤範圍
+            self.turn_speed = 5.0  # 轉向速度
+            self.bullet_id = 0  # 子彈編號，用於目標分配
 
     def get_base_damage(self):
         """
@@ -75,25 +82,33 @@ class Bullet(GameObject):
         int: 根據武器類型回傳對應的基礎傷害\n
         """
         damage_values = {
-            "machine_gun": 15,  # 機關槍：攻擊力低
+            "machine_gun": 8,  # 機關槍：攻擊力降低
             "assault_rifle": 40,  # 衝鋒槍：攻擊力高
             "shotgun": 25,  # 散彈槍：攻擊力中等
-            "sniper": 100,  # 狙擊槍：攻擊力超高
+            "sniper": 90,  # 狙擊槍：攻擊力降低10%（100->90）
+            "lightning_tracking": 90,  # 雷電追蹤：與調整後的狙擊槍相同
         }
         return damage_values.get(self.bullet_type, 20)
 
-    def update(self):
+    def update(self, targets=None):
         """
         更新子彈位置和狀態 - 每幀執行的移動邏輯\n
+        \n
+        參數:\n
+        targets (list): 可能的追蹤目標列表（用於雷電追蹤）\n
         \n
         處理：\n
         1. 根據方向和速度移動子彈\n
         2. 計算飛行距離\n
         3. 檢查是否超出射程\n
-        4. 檢查是否飛出螢幕邊界\n
+        4. 雷電追蹤邏輯\n
         """
         if not self.is_active:
             return
+
+        # 雷電追蹤邏輯
+        if self.bullet_type == "lightning_tracking" and targets:
+            self.update_tracking(targets)
 
         # 根據方向向量移動子彈
         self.x += self.direction_x * self.speed
@@ -108,10 +123,86 @@ class Bullet(GameObject):
         if self.distance_traveled > self.max_distance:
             self.is_active = False
 
-        # 移除螢幕邊界檢查，讓子彈永遠飛行
-
         # 更新碰撞矩形
         self.update_rect()
+
+    def update_tracking(self, targets):
+        """
+        更新雷電追蹤邏輯 - 使用分配的目標進行追蹤\n
+        \n
+        參數:\n
+        targets (list): 可能的追蹤目標列表\n
+        """
+        # 優先使用分配的目標
+        target_to_track = None
+
+        if hasattr(self, "assigned_target") and self.assigned_target:
+            # 檢查分配的目標是否還在目標列表中（還活著）
+            if self.assigned_target in targets:
+                target_to_track = self.assigned_target
+
+        # 如果沒有分配目標或分配目標已死亡，找最近的目標
+        if not target_to_track and targets:
+            closest_target = None
+            closest_distance = float("inf")
+
+            for target in targets:
+                # 計算到目標的距離
+                target_center_x = target.x + getattr(target, "width", 0) // 2
+                target_center_y = target.y + getattr(target, "height", 0) // 2
+
+                dx = target_center_x - self.x
+                dy = target_center_y - self.y
+                distance = math.sqrt(dx**2 + dy**2)
+
+                # 在追蹤範圍內且是最近的目標
+                if distance <= self.tracking_range and distance < closest_distance:
+                    closest_target = target
+                    closest_distance = distance
+
+            target_to_track = closest_target
+
+        # 如果找到目標，進行積極追蹤
+        if target_to_track:
+            self.tracking_target = target_to_track
+            target_center_x = (
+                target_to_track.x + getattr(target_to_track, "width", 0) // 2
+            )
+            target_center_y = (
+                target_to_track.y + getattr(target_to_track, "height", 0) // 2
+            )
+
+            # 計算到目標的方向
+            dx = target_center_x - self.x
+            dy = target_center_y - self.y
+            distance = math.sqrt(dx**2 + dy**2)
+
+            if distance > 0:
+                # 標準化目標方向
+                target_dir_x = dx / distance
+                target_dir_y = dy / distance
+
+                # 計算強烈的轉向 - 直接設定方向而不是漸進式轉向
+                turn_intensity = 0.8  # 高轉向強度，讓子彈快速調整方向
+
+                # 如果距離很近，直接指向目標
+                if distance < 80:
+                    self.direction_x = target_dir_x
+                    self.direction_y = target_dir_y
+                else:
+                    # 距離較遠時使用快速轉向
+                    self.direction_x += (
+                        target_dir_x - self.direction_x
+                    ) * turn_intensity
+                    self.direction_y += (
+                        target_dir_y - self.direction_y
+                    ) * turn_intensity
+
+                # 重新標準化方向向量，保持速度一致
+                current_length = math.sqrt(self.direction_x**2 + self.direction_y**2)
+                if current_length > 0:
+                    self.direction_x /= current_length
+                    self.direction_y /= current_length
 
     def get_damage_against_target(self, target_type):
         """
@@ -176,10 +267,24 @@ class Bullet(GameObject):
             pygame.draw.polygon(screen, self.color, points)
 
         elif self.bullet_type == "sniper":
-            # 狙擊槍：大圓形
+            # 狙擊槍：大圓形，紅色
             pygame.draw.circle(screen, self.color, (center_x, center_y), radius)
             # 內圈顯示威力
             pygame.draw.circle(screen, WHITE, (center_x, center_y), radius // 2)
+
+        elif self.bullet_type == "lightning_tracking":
+            # 雷電追蹤：簡潔的黃色閃電效果，無追蹤線
+            pygame.draw.circle(screen, YELLOW, (center_x, center_y), radius)
+            # 繪製閃電效果
+            pygame.draw.circle(screen, WHITE, (center_x, center_y), radius // 2)
+            # 額外的電光效果
+            for i in range(4):
+                angle = (i * math.pi / 2) + (time.time() * 5)  # 旋轉的電光
+                end_x = center_x + math.cos(angle) * radius * 1.5
+                end_y = center_y + math.sin(angle) * radius * 1.5
+                pygame.draw.line(
+                    screen, YELLOW, (center_x, center_y), (int(end_x), int(end_y)), 1
+                )
 
 
 ######################武器管理器類別######################
@@ -198,6 +303,7 @@ class WeaponManager:
 
     def __init__(self):
         self.bullets = []  # 所有活躍的子彈列表
+        self.lightning_bullets = []  # 雷電追蹤子彈列表
 
     def create_bullet(self, bullet_info):
         """
@@ -228,6 +334,88 @@ class WeaponManager:
 
         self.bullets.extend(new_bullets)
         return new_bullets
+
+    def create_ultimate(self, ultimate_info, targets=None):
+        """
+        根據玩家必殺技資訊建立雷電追蹤子彈 - 智能目標分配\n
+        \n
+        策略:\n
+        - 多怪物(>=2): 5顆子彈分散攻擊不同怪物\n
+        - 單怪物(1): 5顆子彈集中攻擊同一怪物\n
+        - 無怪物(0): 子彈朝預設方向發射\n
+        \n
+        參數:\n
+        ultimate_info (list): 包含五顆必殺技子彈資訊的列表\n
+        targets (list): 當前可攻擊的目標列表\n
+        \n
+        回傳:\n
+        list: 新建立的雷電子彈物件列表\n
+        """
+        if ultimate_info is None:
+            return []
+
+        new_lightning_bullets = []
+
+        # 處理五顆子彈的情況
+        if isinstance(ultimate_info, list):
+            # 扇型發射角度設定
+            fan_angle = math.pi / 3  # 60度扇形角度
+            start_angle = -fan_angle / 2  # 從-30度開始
+            angle_step = fan_angle / 4  # 每顆子彈間隔15度
+
+            for i, info in enumerate(ultimate_info):
+                # 計算扇型發射的初始方向
+                bullet_angle = start_angle + (i * angle_step)
+                initial_direction_x = math.cos(bullet_angle)
+                initial_direction_y = math.sin(bullet_angle)
+
+                lightning_bullet = Bullet(
+                    info["start_x"],
+                    info["start_y"],
+                    initial_direction_x,
+                    initial_direction_y,
+                    info["type"],
+                )
+
+                # 設定必殺技特定屬性
+                lightning_bullet.damage = info["damage"]
+                lightning_bullet.speed = info["speed"]
+                lightning_bullet.bullet_id = info.get("bullet_id", 0)
+
+                # 立即分配追蹤目標
+                if targets:
+                    if len(targets) == 1:
+                        # 單怪物：所有子彈都追蹤同一目標
+                        lightning_bullet.assigned_target = targets[0]
+                    else:
+                        # 多怪物：循環分配不同目標
+                        target_index = i % len(targets)
+                        lightning_bullet.assigned_target = targets[target_index]
+                else:
+                    lightning_bullet.assigned_target = None
+
+                new_lightning_bullets.append(lightning_bullet)
+        else:
+            # 兼容舊的單發格式
+            lightning_bullet = Bullet(
+                ultimate_info["start_x"],
+                ultimate_info["start_y"],
+                1,  # 初始方向，之後會被追蹤邏輯覆蓋
+                0,
+                ultimate_info["type"],
+            )
+
+            # 設定必殺技特定屬性
+            lightning_bullet.damage = ultimate_info["damage"]
+            lightning_bullet.speed = ultimate_info["speed"]
+
+            new_lightning_bullets.append(lightning_bullet)
+
+        # 將新子彈加入列表
+        self.lightning_bullets.extend(new_lightning_bullets)
+        self.bullets.extend(new_lightning_bullets)  # 也加入一般子彈列表進行碰撞檢測
+
+        return new_lightning_bullets
 
     def _create_single_bullet(self, info):
         """
@@ -291,16 +479,22 @@ class WeaponManager:
 
         return hit_targets
 
-    def update_bullets(self):
+    def update_bullets(self, targets=None):
         """
         更新所有子彈的狀態 - 移除非活躍的子彈\n
+        \n
+        參數:\n
+        targets (list): 可能的追蹤目標列表（用於雷電追蹤）\n
         """
         # 更新每顆子彈
         for bullet in self.bullets:
-            bullet.update()
+            bullet.update(targets)
 
         # 移除非活躍的子彈
         self.bullets = [bullet for bullet in self.bullets if bullet.is_active]
+        self.lightning_bullets = [
+            bullet for bullet in self.lightning_bullets if bullet.is_active
+        ]
 
     def check_bullet_collisions(self, targets):
         """
@@ -372,7 +566,7 @@ class WeaponManager:
         list: 所有碰撞結果\n
         """
         # 更新所有子彈
-        self.update_bullets()
+        self.update_bullets(targets)
 
         # 檢查子彈碰撞
         collision_results = []

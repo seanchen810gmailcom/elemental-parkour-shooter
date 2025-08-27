@@ -163,6 +163,28 @@ class ElementalParkourShooter:
                 if bullet_info:
                     self.weapon_manager.create_bullet(bullet_info)
 
+                # 處理玩家的必殺技 - 檢查是否有待發射的必殺技
+                ultimate_info = self.player.get_pending_ultimate()
+                if ultimate_info:
+                    # 獲取當前所有可攻擊的目標
+                    all_targets = []
+                    all_targets.extend(self.monster_manager.monsters)
+                    if self.monster_manager.boss:
+                        all_targets.append(self.monster_manager.boss)
+
+                    # 創建必殺技，傳入目標資訊讓子彈智能分配攻擊
+                    self.weapon_manager.create_ultimate(ultimate_info, all_targets)
+
+                    # 根據敵人數量顯示不同的攻擊模式訊息
+                    if len(all_targets) == 0:
+                        print("⚡ 雷電追蹤攻擊發動！(無目標模式)")
+                    elif len(all_targets) == 1:
+                        print("⚡ 雷電追蹤攻擊發動！(集中火力模式)")
+                    else:
+                        print(
+                            f"⚡ 雷電追蹤攻擊發動！(分散攻擊模式 - {len(all_targets)}個目標)"
+                        )
+
                 # 處理玩家的近戰攻擊
                 melee_info = (
                     self.player.melee_attack()
@@ -211,11 +233,14 @@ class ElementalParkourShooter:
             # 檢查Boss是否被擊敗
             if monster_update_result["boss_defeated"]:
                 # Boss被擊敗後在Boss位置生成星星
-                if self.monster_manager.boss:
-                    self.level_manager.star_x = self.monster_manager.boss.x
-                    self.level_manager.star_y = self.monster_manager.boss.y - 50
-                    self.level_manager.star_collected = False
-                    print("🌟 Boss被擊敗！勝利星星出現了！")
+                boss_x = monster_update_result.get(
+                    "boss_death_x", self.level_manager.level_width // 2
+                )
+                boss_y = monster_update_result.get("boss_death_y", SCREEN_HEIGHT - 200)
+                self.level_manager.star_x = boss_x
+                self.level_manager.star_y = boss_y - 50
+                self.level_manager.star_collected = False
+                print("🌟 Boss被擊敗！勝利星星出現了！")
 
             # Boss系統移除，簡化遊戲體驗
 
@@ -318,6 +343,7 @@ class ElementalParkourShooter:
             # 繪製 UI 元素（固定在螢幕上，不受攝影機影響）
             self.player.draw_health_bar(self.screen)
             self.player.draw_bullet_ui(self.screen)
+            self.player.draw_ultimate_ui(self.screen)
 
             # 繪製分數（移動到右上角，避免與血條重疊）
             score_font = get_chinese_font(FONT_SIZE_MEDIUM)
@@ -434,5 +460,6 @@ def main():
     game.run()
 
 
-# 啟動遊戲
-main()
+# 只有在直接執行時才啟動遊戲
+if __name__ == "__main__":
+    main()
