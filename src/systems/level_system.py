@@ -487,11 +487,11 @@ class LevelManager:
         )
         self.platforms.append(ground_platform)
 
-        # 每層平台的基本設定
-        platforms_per_level = 3  # 每層3個平台
-        level_height_gap = 100  # 每層之間的高度差（減少到100像素，更容易攀爬）
-        platform_min_width = 120  # 增加最小寬度讓平台更好跳上去
-        platform_max_width = 200  # 增加最大寬度
+        # 每層平台的基本設定 - 提升難度
+        platforms_per_level = 2  # 每層平台數量從3減少到2，增加跳躍距離
+        level_height_gap = 120  # 每層之間的高度差增加到120像素，跳躍更困難
+        platform_min_width = 100  # 減少最小寬度，讓平台更小更難跳上
+        platform_max_width = 160  # 減少最大寬度，平台整體變小
 
         for level in range(1, self.total_levels + 1):
             # 計算這層的基準高度
@@ -505,13 +505,14 @@ class LevelManager:
                 section_start = section * section_width
                 section_end = section_start + section_width
 
-                # 平台位置隨機，但確保可達性（減少間距）
+                # 平台位置隨機，間距增大提升難度
                 platform_x = random.randint(
-                    section_start + 20, section_end - platform_max_width - 20
+                    section_start + 50,
+                    section_end - platform_max_width - 50,  # 增加邊距讓平台間距更大
                 )
 
-                # 平台高度變化很小，讓跳躍更容易
-                height_variation = random.randint(-15, 15)
+                # 平台高度變化增大，讓跳躍更困難
+                height_variation = random.randint(-25, 25)  # 從 -15,15 增加到 -25,25
                 platform_y = base_y + height_variation
 
                 # 平台寬度隨機
@@ -525,11 +526,11 @@ class LevelManager:
                 platform = Platform(platform_x, platform_y, platform_width, 25)
                 self.platforms.append(platform)
 
-            # 為了確保可達性，在每層額外增加一些小跳板
-            if level % 3 == 0:  # 每三層增加額外的輔助平台
+            # 減少輔助平台的生成，增加跳躍挑戰性
+            if level % 4 == 0:  # 每四層增加額外的輔助平台（原本每三層）
                 extra_x = self.level_width // 2
-                extra_y = base_y - 30
-                extra_platform = Platform(extra_x - 40, extra_y, 80, 20)
+                extra_y = base_y - 40  # 輔助平台位置稍微提高
+                extra_platform = Platform(extra_x - 30, extra_y, 60, 20)  # 輔助平台變小
                 self.platforms.append(extra_platform)
 
         # 在左右兩側創建實心牆壁，防止玩家掉出關卡

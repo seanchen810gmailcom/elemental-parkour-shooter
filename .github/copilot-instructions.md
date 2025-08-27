@@ -24,22 +24,25 @@ src/
 - 支援雙重導入模式：模組模式 (`python3 -m src.main`) 和直接執行
 - 所有檔案使用 try/except ImportError 模式處理相對/絕對導入
 
-### 2. 管理器模式
+### 2. 管理器模式與更新順序
 
-每個複雜系統都有專用管理器，必須提供 `update()` 方法並在主迴圈固定順序呼叫：
+每個複雜系統都有專用管理器，**必須嚴格按照以下順序更新**（在 `main.py` 中）：
 
-- `MonsterManager`: 怪物生成、AI、碰撞
-- `WeaponManager`: 子彈物理、碰撞檢測
-- `LevelManager`: 程序生成平台、環境物件
-- `DamageDisplayManager`: 浮動傷害數字
+```python
+# 固定更新順序 - 破壞此順序會導致狀態不一致
+player_update_result = self.player.update(platforms)
+level_update_result = self.level_manager.update(dt, self.player, bullets)
+monster_update_result = self.monster_manager.update(player, platforms, dt)
+collision_results = self.weapon_manager.update(targets=all_targets)
+self.damage_display.update()
+```
 
-**關鍵更新順序**（在 `main.py` 中）：
+**管理器職責**:
 
-1. Player 更新（包含移動和射擊）
-2. LevelManager 更新（平台和星星）
-3. MonsterManager 更新（AI 和生成）
-4. WeaponManager 更新（子彈碰撞）
-5. DamageDisplayManager 更新（UI 效果）
+- `MonsterManager`: 怪物生成、AI、Boss 戰、投射物管理
+- `WeaponManager`: 子彈物理、碰撞檢測、必殺技系統
+- `LevelManager`: 30 層跑酷平台生成、星星系統
+- `DamageDisplayManager`: 浮動傷害數字、UI 效果
 
 ## 元素屬性系統
 
@@ -62,14 +65,32 @@ if status_effect:
     target.add_status_effect(status_effect["type"], status_effect["duration"], status_effect["intensity"])
 ```
 
-### 屬性剋制關係（可在 ElementSystem 調整）：
+## 遊戲平衡與難度配置
 
-- 水 → 岩漿怪（2x 傷害）
-- 雷 → 水怪（2x 傷害 + 麻痺效果）
-- 冰 → 龍捲風怪（強力減速）
-- 火 → 對水怪有效，對岩漿怪可能抗性
+### 配置集中化原則
 
-**重要**: 不要在多處複製屬性判定邏輯，所有平衡改動應集中在 ElementSystem。
+所有數值調整都在 `config.py` 中進行，已針對挑戰性進行調整：
+
+```python
+# 怪物難度已強化（+50% 血量/攻擊力）
+LAVA_MONSTER_HEALTH = 120  # 提升血量 80→120 (+50%)
+LAVA_MONSTER_DAMAGE = 45   # 提升傷害 30→45 (+50%)
+
+# Boss 系統更具挑戰性
+LAVA_TORNADO_BOSS_HEALTH = 1500  # 提升Boss血量 1000→1500 (+50%)
+
+# 玩家容錯率降低
+PLAYER_MAX_HEALTH = 200    # 降低玩家血量從300到200
+PLAYER_LIVES = 2           # 從3次降到2次
+```
+
+### 動態難度調整模式
+
+在 `MonsterManager` 中實現：
+
+- 生成間隔從 4 秒縮短到 2.5 秒（+40%頻率）
+- 最大怪物數量從 6 增到 9 隻
+- 每波屬性增長率提升（血量+15%，攻擊力+8%）
 
 ## 管理器通信模式
 
@@ -82,21 +103,21 @@ if status_effect:
 monster_update_result = self.monster_manager.update(player, platforms, dt)
 if monster_update_result["boss_defeated"]:
     # 在Boss位置生成勝利星星
-    if self.monster_manager.boss:
-        self.level_manager.star_x = self.monster_manager.boss.x
+    self.level_manager.star_x = monster_update_result["boss_death_x"]
+    self.level_manager.star_y = monster_update_result["boss_death_y"] - 50
 
 # WeaponManager 返回碰撞結果
 collision_results = self.weapon_manager.update(targets=all_targets)
 for collision in collision_results:
-    # 處理傷害顯示和分數計算
+    self.score += 10  # 每發子彈擊中得分
     self.damage_display.add_damage_number(...)
 ```
 
-### 資源共享模式
+### 特殊系統整合
 
-- `LevelManager.get_platforms()`: 提供平台數據給物理系統
-- `Player.get_pending_bullet()`: 玩家射擊請求傳遞給武器系統
-- `MonsterManager.monsters + boss`: 組合目標列表給武器系統
+- **Boss 火焰子彈系統**: Boss 有獨立的 `fire_bullets` 列表，在 `MonsterManager.update_boss_fire_bullets()` 中處理
+- **必殺技系統**: 玩家按 Q 觸發，`weapon_manager.create_ultimate()` 處理智能目標分配
+- **30 層跑酷系統**: `LevelManager` 生成大型垂直關卡，平台間距已調整提升難度
 
 ## 開發者工作流程
 
@@ -113,18 +134,12 @@ python3 -m src.main
 python3 main.py
 ```
 
-### 關鍵調試模式
-
-- 模組導入錯誤時，必須用 `python3 -m src.main` 執行
-- 字體載入失敗會自動降級，檢查 console 輸出確定實際字體
-- 攝影機相關問題：所有 draw 方法都需要減去 `camera_x, camera_y` 偏移
-
 ### 碰撞檢測架構
 
-專案有多個獨立的碰撞系統：
+專案有多個獨立的碰撞系統，**不要合併**：
 
 - `WeaponManager.check_bullet_collisions()`: 玩家子彈對怪物
-- `Monster.check_water_bullet_collision()`: 怪物子彈對玩家（如水怪）
+- `MonsterManager.update_boss_fire_bullets()`: Boss 火焰子彈對玩家
 - `Player.handle_collisions()`: 玩家對平台物理
 - `Monster.handle_collisions()`: 怪物對平台物理
 
@@ -152,6 +167,17 @@ except ImportError:
 - 自動降級到系統預設字體
 - macOS 特定字體路徑：`/System/Library/Fonts/STHeiti Light.ttc`
 
+### 攝影機系統
+
+所有 draw 方法都需要處理攝影機偏移：
+
+```python
+def draw(self, screen, camera_x=0, camera_y=0):
+    screen_x = self.x - camera_x
+    screen_y = self.y - camera_y
+    # 繪製邏輯...
+```
+
 ### 怪物 AI 與投射物
 
 - 某些怪物有獨立的投射物系統（如 `WaterMonster.water_bullets`）
@@ -166,6 +192,13 @@ except ImportError:
 
 ## 常見開發任務
 
+### 平衡調整模式
+
+1. **怪物數值**: 修改 `config.py` 中對應常數
+2. **生成頻率**: 調整 `MonsterManager.spawn_interval`
+3. **關卡難度**: 修改 `LevelManager.generate_parkour_platforms()` 中的平台參數
+4. **Boss 強度**: 調整 `MonsterManager.spawn_boss()` 中的 Boss 屬性倍數
+
 ### 新增怪物
 
 1. 在 `entities/monsters.py` 繼承 `Monster` 類別
@@ -173,40 +206,11 @@ except ImportError:
 3. 在 `ElementSystem` 定義弱點和抗性關係
 4. 把生成邏輯加到 `MonsterManager.spawn_monster()`
 
-### 新增子彈類型
-
-1. 擴充 `entities/weapon.py` 的 `Bullet` 類別
-2. 在 `config.py` 設定傷害和顏色參數
-3. 在 `ElementSystem` 加入新的剋制關係
-
-### 新增關卡
-
-1. 在 `systems/level_system.py` 新增 `generate_*_level()` 方法
-2. 定義平台佈局和環境特色
-3. 設定怪物生成模式和難度
-
 ### 新增狀態效果
 
 1. 在 `ElementSystem.STATUS_EFFECT_MAP` 定義效果配置
 2. 確保目標物件有 `add_status_effect()` 方法
 3. 在怪物的 `update()` 方法中處理效果邏輯
-
-### 範例 docstring 格式
-
-```python
-def calculate_damage(self, base_damage, attacker_element, target_type):
-    """
-    計算考慮屬性剋制後的最終傷害\n
-    \n
-    參數:\n
-    base_damage (int): 基礎傷害值，範圍 > 0\n
-    attacker_element (str): 攻擊元素類型\n
-    target_type (str): 目標怪物類型\n
-    \n
-    回傳:\n
-    int: 經過剋制後的最終傷害（最小為 1）\n
-    """
-```
 
 ## 常見問題與調試
 

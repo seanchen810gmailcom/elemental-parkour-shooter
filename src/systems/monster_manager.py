@@ -2,6 +2,7 @@
 import pygame
 import random
 import time
+import math
 
 # 支援直接執行和模組執行兩種方式
 try:
@@ -28,8 +29,8 @@ class MonsterManager:
     def __init__(self):
         self.monsters = []  # 所有活躍怪物列表
         self.spawn_timer = 0
-        self.spawn_interval = 4.0  # 生成間隔（秒）- 固定為4秒
-        self.max_monsters = 6  # 螢幕上最大怪物數量
+        self.spawn_interval = 2.5  # 生成間隔（秒）- 從4秒縮短到2.5秒，提升40%生成頻率
+        self.max_monsters = 9  # 螢幕上最大怪物數量 - 從6增加到9
         self.wave_number = 1  # 當前波次
         self.monsters_killed = 0  # 擊殺數量
         self.boss_spawned = False  # Boss是否已生成
@@ -138,9 +139,9 @@ class MonsterManager:
         參數:\n
         monster (Monster): 要調整的怪物\n
         """
-        # 每波增加10%的生命值和5%的攻擊力
-        health_multiplier = 1.0 + (self.wave_number - 1) * 0.1
-        damage_multiplier = 1.0 + (self.wave_number - 1) * 0.05
+        # 每波增加15%的生命值和8%的攻擊力（原本10%和5%）
+        health_multiplier = 1.0 + (self.wave_number - 1) * 0.15
+        damage_multiplier = 1.0 + (self.wave_number - 1) * 0.08
 
         monster.max_health = int(monster.max_health * health_multiplier)
         monster.health = monster.max_health
@@ -155,7 +156,7 @@ class MonsterManager:
         """
         self.spawn_timer += dt
 
-        # 固定每4秒生成一隻怪物
+        # 固定每2.5秒生成一隻怪物（提升生成頻率）
         if self.spawn_timer >= self.spawn_interval:
             self.spawn_timer = 0
             return True  # 該生成新怪物了
@@ -184,6 +185,9 @@ class MonsterManager:
         # 檢查Boss是否死亡
         if self.boss and not self.boss.is_alive:
             killed_count += 1
+            # 清理Boss的火焰子彈
+            if hasattr(self.boss, "fire_bullets"):
+                self.boss.fire_bullets.clear()
             # Boss死亡不增加擊殺計數，因為它是特殊目標
 
         return killed_count
@@ -195,8 +199,8 @@ class MonsterManager:
         回傳:\n
         bool: True 表示應該生成Boss\n
         """
-        # 每擊殺10個怪物生成一次Boss
-        if self.monsters_killed >= 10 and not self.boss_spawned:
+        # 每擊殺7個怪物生成一次Boss（原本10個）- 更頻繁的Boss戰
+        if self.monsters_killed >= 7 and not self.boss_spawned:
             return True
         return False
 
@@ -223,15 +227,24 @@ class MonsterManager:
         # 創建Boss（使用LavaMonster作為基礎，但增強屬性）
         self.boss = LavaMonster(spawn_x, spawn_y)
 
-        # Boss血量增加三倍（從7倍改為3倍）
-        self.boss.max_health = LAVA_MONSTER_HEALTH * 3
+        # 調整Boss體積為兩倍大
+        self.boss.width = LAVA_MONSTER_WIDTH * BOSS_WIDTH_MULTIPLIER
+        self.boss.height = LAVA_MONSTER_HEIGHT * BOSS_HEIGHT_MULTIPLIER
+
+        # Boss血量設定為1500（提升難度）
+        self.boss.max_health = 1500
         self.boss.health = self.boss.max_health
 
-        # Boss攻擊力稍微提升
-        self.boss.damage = LAVA_MONSTER_DAMAGE * 1.5
+        # Boss攻擊力大幅提升
+        self.boss.damage = LAVA_MONSTER_DAMAGE * 2.0  # 從1.5倍提升到2.0倍
 
-        # Boss射擊頻率更高（從3秒改為1.5秒）
-        self.boss.lava_ball_cooldown = 1.5
+        # Boss射擊頻率更高（從1.5秒改為1.0秒）
+        self.boss.lava_ball_cooldown = 1.0
+
+        # 添加火焰子彈功能 - 提升攻擊頻率
+        self.boss.fire_bullet_cooldown = 1.5  # 火焰子彈冷卻時間（從2.0秒提升到1.5秒）
+        self.boss.last_fire_bullet_time = 0
+        self.boss.fire_bullets = []  # 火焰子彈列表
 
         # 設定Boss標記
         self.boss.is_boss = True
@@ -241,7 +254,9 @@ class MonsterManager:
         self.boss.home_platform = platform
 
         self.boss_spawned = True
-        print("🔥 Boss 岩漿怪王 出現！血量是一般怪物的3倍，能發射子彈攻擊！")
+        print(
+            "🔥 Boss 岩漿怪王 出現！血量是一般怪物的3倍，能發射熔岩球和火焰子彈攻擊！"
+        )
         return self.boss
 
     def update(self, player, platforms, dt):
@@ -263,6 +278,8 @@ class MonsterManager:
         # 更新Boss（如果存在）
         if self.boss:
             self.boss.update(player, platforms)
+            # 處理Boss的火焰子彈邏輯
+            self.update_boss_fire_bullets(player)
 
         # 移除死亡怪物（包含Boss）
         killed_this_frame = self.remove_dead_monsters()
@@ -367,6 +384,102 @@ class MonsterManager:
         self.max_monsters = 6
         self.spawn_weights = [1, 1]
 
+    def create_boss_fire_bullet(self, target_x, target_y):
+        """
+        創建Boss火焰子彈\n
+        \n
+        參數:\n
+        target_x (float): 目標 X 座標\n
+        target_y (float): 目標 Y 座標\n
+        \n
+        回傳:\n
+        dict or None: 火焰子彈資訊\n
+        """
+        if not self.boss or not hasattr(self.boss, "fire_bullet_cooldown"):
+            return None
+
+        current_time = time.time()
+        if (
+            current_time - self.boss.last_fire_bullet_time
+            < self.boss.fire_bullet_cooldown
+        ):
+            return None
+
+        # 計算發射方向
+        start_x = self.boss.x + self.boss.width // 2
+        start_y = self.boss.y + self.boss.height // 2
+
+        dx = target_x - start_x
+        dy = target_y - start_y
+        distance = math.sqrt(dx**2 + dy**2)
+
+        if distance > 0:
+            direction_x = dx / distance
+            direction_y = dy / distance
+
+            fire_bullet = {
+                "x": start_x,
+                "y": start_y,
+                "velocity_x": direction_x * 10,  # 火焰子彈速度
+                "velocity_y": direction_y * 10,
+                "damage": int(self.boss.damage * 0.8),  # 火焰子彈傷害
+                "lifetime": 4.0,  # 4秒後消失
+                "created_time": current_time,
+            }
+
+            self.boss.fire_bullets.append(fire_bullet)
+            self.boss.last_fire_bullet_time = current_time
+            return fire_bullet
+
+        return None
+
+    def update_boss_fire_bullets(self, player):
+        """
+        更新Boss火焰子彈狀態並檢查碰撞\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        """
+        if not self.boss or not hasattr(self.boss, "fire_bullets"):
+            return
+
+        current_time = time.time()
+        active_bullets = []
+
+        for bullet in self.boss.fire_bullets:
+            # 檢查生存時間
+            if current_time - bullet["created_time"] > bullet["lifetime"]:
+                continue
+
+            # 更新位置
+            bullet["x"] += bullet["velocity_x"]
+            bullet["y"] += bullet["velocity_y"]
+
+            # 檢查與玩家的碰撞
+            bullet_rect = pygame.Rect(bullet["x"] - 8, bullet["y"] - 8, 16, 16)
+            if bullet_rect.colliderect(player.rect):
+                # 火焰子彈擊中玩家
+                player.take_damage(bullet["damage"])
+                print(f"🔥 Boss火焰子彈擊中玩家！造成 {bullet['damage']} 點傷害")
+                continue  # 擊中後子彈消失
+
+            # 檢查是否超出螢幕
+            if 0 <= bullet["x"] <= SCREEN_WIDTH and 0 <= bullet["y"] <= SCREEN_HEIGHT:
+                active_bullets.append(bullet)
+
+        self.boss.fire_bullets = active_bullets
+
+        # 嘗試發射新的火焰子彈
+        if self.boss.is_alive and player.is_alive:
+            # 計算與玩家的距離
+            dx = player.x - self.boss.x
+            dy = player.y - self.boss.y
+            distance = math.sqrt(dx**2 + dy**2)
+
+            # 如果玩家在合適的距離內，發射火焰子彈
+            if 80 <= distance <= 250:  # 火焰子彈的有效攻擊範圍
+                self.create_boss_fire_bullet(player.x, player.y)
+
     def draw(self, screen, camera_x=0, camera_y=0):
         """
         繪製所有怪物\n
@@ -394,6 +507,30 @@ class MonsterManager:
             text_rect.centerx = boss_screen_x + self.boss.width // 2
             text_rect.bottom = boss_screen_y - 10
             screen.blit(boss_text, text_rect)
+
+            # 繪製Boss的火焰子彈
+            if hasattr(self.boss, "fire_bullets"):
+                for bullet in self.boss.fire_bullets:
+                    bullet_screen_x = bullet["x"] - camera_x
+                    bullet_screen_y = bullet["y"] - camera_y
+                    # 只繪製在螢幕範圍內的火焰子彈
+                    if (
+                        -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
+                        and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
+                    ):
+                        # 繪製火焰子彈：橘紅色外圈和黃色內圈
+                        pygame.draw.circle(
+                            screen,
+                            FIRE_BULLET_COLOR,
+                            (int(bullet_screen_x), int(bullet_screen_y)),
+                            8,
+                        )
+                        pygame.draw.circle(
+                            screen,
+                            YELLOW,
+                            (int(bullet_screen_x), int(bullet_screen_y)),
+                            4,
+                        )
 
     def get_monster_count(self):
         """
