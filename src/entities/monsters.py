@@ -625,6 +625,24 @@ class LavaMonster(Monster):
 
         return hit
 
+    def auto_heal(self):
+        """
+        自動回血機制（僅限Boss模式）\n
+        """
+        # 只有當怪物被設定為Boss時才會回血
+        if not hasattr(self, "heal_cooldown") or not hasattr(self, "is_boss"):
+            return
+
+        current_time = time.time()
+        if current_time - self.last_heal_time >= self.heal_cooldown:
+            if self.health < self.max_health:
+                old_health = self.health
+                self.health = min(self.max_health, self.health + self.heal_amount)
+                if self.health > old_health:
+                    print(f"💚 岩漿Boss回血：{old_health} → {self.health}")
+
+            self.last_heal_time = current_time
+
     def update(self, player, platforms):
         """
         岩漿怪的更新方法\n
@@ -641,6 +659,9 @@ class LavaMonster(Monster):
 
             # 檢查熔岩球碰撞
             self.check_lava_ball_collision(player)
+
+            # 如果是Boss模式，執行自動回血
+            self.auto_heal()
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """
@@ -906,6 +927,614 @@ class WaterMonster(Monster):
                 pygame.draw.circle(
                     screen, WHITE, (int(bullet_screen_x), int(bullet_screen_y)), 3
                 )
+
+
+######################狙擊Boss類別######################
+
+
+class SniperBoss(Monster):
+    """
+    狙擊Boss - 超強戰術型Boss，擁有自動追蹤子彈、震波攻擊和躲避能力\n
+    \n
+    特殊能力：\n
+    1. 自動追蹤子彈：每5秒發射會自動追蹤玩家的子彈，隨時間消失\n
+    2. 震波攻擊：跳躍後落地產生震波，擊退並傷害玩家\n
+    3. 躲避AI：能檢測玩家子彈並進行閃避移動\n
+    4. 自動回血：每5秒回復1點生命值\n
+    5. 超高血量：比普通怪物高1/3倍\n
+    \n
+    參數:\n
+    x (float): 初始 X 座標\n
+    y (float): 初始 Y 座標\n
+    """
+
+    def __init__(self, x, y):
+        # 基於龍捲風怪的基礎屬性，但大幅增強
+        super().__init__(
+            x,
+            y,
+            SNIPER_BOSS_WIDTH,
+            SNIPER_BOSS_HEIGHT,
+            SNIPER_BOSS_COLOR,
+            "sniper_boss",
+            SNIPER_BOSS_HEALTH,
+            SNIPER_BOSS_DAMAGE,
+            SNIPER_BOSS_SPEED,
+        )
+
+        # Boss標記
+        self.is_boss = True
+
+        # 提升Boss的攻擊範圍和檢測範圍
+        self.detection_range = 300  # 大幅增加檢測範圍
+        self.attack_range = 250  # 大幅增加攻擊範圍
+
+        # 自動追蹤子彈系統
+        self.tracking_bullet_cooldown = 2.0  # 每2秒發射一次追蹤子彈（提高頻率）
+        self.last_tracking_bullet_time = 0
+        self.tracking_bullets = []
+
+        # 震波攻擊系統
+        self.shockwave_cooldown = 6.0  # 震波攻擊冷卻時間（降低冷卻）
+        self.last_shockwave_time = 0
+        self.is_jumping = False  # 是否在跳躍狀態
+        self.jump_phase = "prepare"  # 跳躍階段：prepare, jumping, landing
+        self.jump_timer = 0
+        self.shockwaves = []  # 當前活躍震波列表
+
+        # 自動回血系統
+        self.heal_cooldown = 5.0  # 每5秒回血一次
+        self.last_heal_time = 0
+        self.heal_amount = 2  # 每次回血量，從1點提升到2點
+
+        # 躲避AI系統
+        self.dodge_detection_range = 150  # 子彈檢測範圍
+        self.dodge_speed_multiplier = 2.0  # 躲避時的速度倍數
+        self.is_dodging = False
+        self.dodge_timer = 0
+        self.dodge_direction = 0  # 躲避方向
+
+        print(f"🎯 狙擊Boss已生成！具備追蹤子彈、震波攻擊和躲避能力！")
+
+    def create_tracking_bullet(self, target_x, target_y):
+        """
+        創建自動追蹤子彈\n
+        \n
+        參數:\n
+        target_x (float): 目標 X 座標\n
+        target_y (float): 目標 Y 座標\n
+        \n
+        回傳:\n
+        dict or None: 追蹤子彈資訊\n
+        """
+        current_time = time.time()
+        if (
+            current_time - self.last_tracking_bullet_time
+            < self.tracking_bullet_cooldown
+        ):
+            return None
+
+        # 計算發射起點
+        start_x = self.x + self.width // 2
+        start_y = self.y + self.height // 2
+
+        tracking_bullet = {
+            "x": start_x,
+            "y": start_y,
+            "target_x": target_x,  # 追蹤目標座標
+            "target_y": target_y,
+            "speed": 8,  # 追蹤子彈速度
+            "damage": self.damage,
+            "lifetime": 7.0,  # 7秒後消失
+            "created_time": current_time,
+            "tracking_strength": 0.1,  # 追蹤強度，控制轉彎靈敏度
+        }
+
+        self.tracking_bullets.append(tracking_bullet)
+        self.last_tracking_bullet_time = current_time
+        print(f"🎯 狙擊Boss發射追蹤子彈！")
+        return tracking_bullet
+
+    def update_tracking_bullets(self, player):
+        """
+        更新所有追蹤子彈的狀態\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        """
+        current_time = time.time()
+        active_bullets = []
+
+        for bullet in self.tracking_bullets:
+            # 檢查生存時間
+            if current_time - bullet["created_time"] > bullet["lifetime"]:
+                continue
+
+            # 更新追蹤目標（玩家位置）
+            bullet["target_x"] = player.x + player.width // 2
+            bullet["target_y"] = player.y + player.height // 2
+
+            # 計算朝向目標的方向
+            dx = bullet["target_x"] - bullet["x"]
+            dy = bullet["target_y"] - bullet["y"]
+            distance = math.sqrt(dx**2 + dy**2)
+
+            if distance > 0:
+                # 計算追蹤移動
+                direction_x = dx / distance
+                direction_y = dy / distance
+
+                # 移動子彈朝向目標
+                bullet["x"] += direction_x * bullet["speed"]
+                bullet["y"] += direction_y * bullet["speed"]
+
+            # 檢查是否超出螢幕邊界
+            if 0 <= bullet["x"] <= SCREEN_WIDTH and 0 <= bullet["y"] <= SCREEN_HEIGHT:
+                active_bullets.append(bullet)
+
+        self.tracking_bullets = active_bullets
+
+    def check_tracking_bullet_collision(self, player):
+        """
+        檢查追蹤子彈與玩家的碰撞\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        \n
+        回傳:\n
+        bool: True 表示有追蹤子彈擊中玩家\n
+        """
+        bullets_to_remove = []
+        hit = False
+
+        for i, bullet in enumerate(self.tracking_bullets):
+            bullet_rect = pygame.Rect(bullet["x"] - 8, bullet["y"] - 8, 16, 16)
+
+            if bullet_rect.colliderect(player.rect):
+                # 追蹤子彈擊中玩家
+                player.take_damage(bullet["damage"])
+                bullets_to_remove.append(i)
+                hit = True
+                print(f"🎯 追蹤子彈擊中玩家！造成 {bullet['damage']} 點傷害")
+
+        # 移除擊中的追蹤子彈
+        for i in reversed(bullets_to_remove):
+            del self.tracking_bullets[i]
+
+        return hit
+
+    def perform_shockwave_attack(self, player):
+        """
+        執行震波攻擊 - 跳躍然後落地產生震波\n
+        \n
+        參數:\n
+        player (Player): 目標玩家\n
+        \n
+        回傳:\n
+        bool: True 表示成功發動震波攻擊\n
+        """
+        current_time = time.time()
+        if current_time - self.last_shockwave_time < self.shockwave_cooldown:
+            return False
+
+        # 計算與玩家的距離
+        dx = player.x - self.x
+        dy = player.y - self.y
+        distance = math.sqrt(dx**2 + dy**2)
+
+        # 只在合適距離內發動震波攻擊（調整距離範圍）
+        if 50 <= distance <= 300:  # 擴大震波攻擊範圍
+            self.is_jumping = True
+            self.jump_phase = "prepare"
+            self.jump_timer = 0.5  # 準備時間
+
+            # 給Boss強大的跳躍力
+            self.velocity_y = -25  # 超強跳躍力
+
+            self.last_shockwave_time = current_time
+            print(f"💥 狙擊Boss準備震波攻擊！")
+            return True
+
+        return False
+
+    def create_shockwave(self):
+        """
+        在Boss落地位置創建震波\n
+        \n
+        回傳:\n
+        dict: 震波資訊\n
+        """
+        shockwave = {
+            "x": self.x + self.width // 2,  # 震波中心
+            "y": self.y + self.height,  # 在Boss腳下
+            "radius": 0,  # 初始半徑
+            "max_radius": 150,  # 最大擴散半徑
+            "expansion_speed": 8,  # 擴散速度
+            "damage": int(self.damage * 1.2),  # 震波傷害
+            "knockback_force": 200,  # 擊退力道
+            "lifetime": 2.0,  # 震波持續時間
+            "created_time": time.time(),
+            "hit_player": False,  # 防止重複傷害
+        }
+
+        self.shockwaves.append(shockwave)
+        print(f"💥 震波產生！半徑將擴散至 {shockwave['max_radius']} 像素")
+        return shockwave
+
+    def update_shockwaves(self, player):
+        """
+        更新所有震波的狀態並檢查碰撞\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        """
+        current_time = time.time()
+        active_shockwaves = []
+
+        for shockwave in self.shockwaves:
+            # 檢查震波是否過期
+            if current_time - shockwave["created_time"] > shockwave["lifetime"]:
+                continue
+
+            # 擴散震波
+            shockwave["radius"] += shockwave["expansion_speed"]
+
+            # 檢查是否達到最大半徑
+            if shockwave["radius"] <= shockwave["max_radius"]:
+                # 檢查與玩家的碰撞（只傷害一次）
+                if not shockwave["hit_player"]:
+                    player_center_x = player.x + player.width // 2
+                    player_center_y = player.y + player.height // 2
+
+                    dx = player_center_x - shockwave["x"]
+                    dy = player_center_y - shockwave["y"]
+                    distance_to_player = math.sqrt(dx**2 + dy**2)
+
+                    # 如果玩家在震波範圍內
+                    if distance_to_player <= shockwave["radius"] + 20:  # 添加一些容錯
+                        # 對玩家造成傷害
+                        player.take_damage(shockwave["damage"])
+
+                        # 計算擊退方向
+                        if distance_to_player > 0:
+                            knockback_x = (dx / distance_to_player) * shockwave[
+                                "knockback_force"
+                            ]
+                            knockback_y = -50  # 向上推一點
+
+                            # 應用擊退效果
+                            if hasattr(player, "velocity_x") and hasattr(
+                                player, "velocity_y"
+                            ):
+                                player.velocity_x += knockback_x * 0.1
+                                player.velocity_y += knockback_y * 0.1
+
+                        shockwave["hit_player"] = True
+                        print(
+                            f"💥 震波擊中玩家！造成 {shockwave['damage']} 點傷害並擊退"
+                        )
+
+                active_shockwaves.append(shockwave)
+
+        self.shockwaves = active_shockwaves
+
+    def detect_and_dodge_bullets(self, bullets):
+        """
+        檢測玩家子彈並執行躲避動作\n
+        \n
+        參數:\n
+        bullets (list): 玩家子彈列表\n
+        \n
+        回傳:\n
+        bool: True 表示檢測到子彈並開始躲避\n
+        """
+        if self.is_dodging:
+            return False
+
+        boss_center_x = self.x + self.width // 2
+        boss_center_y = self.y + self.height // 2
+
+        for bullet in bullets:
+            # 支援子彈物件和字典格式
+            if hasattr(bullet, "x"):
+                bullet_x, bullet_y = bullet.x, bullet.y
+                bullet_velocity_x = getattr(bullet, "velocity_x", 0)
+                bullet_velocity_y = getattr(bullet, "velocity_y", 0)
+            else:
+                bullet_x, bullet_y = bullet.get("x", 0), bullet.get("y", 0)
+                bullet_velocity_x = bullet.get("velocity_x", 0)
+                bullet_velocity_y = bullet.get("velocity_y", 0)
+
+            # 計算子彈與Boss的距離
+            dx = bullet_x - boss_center_x
+            dy = bullet_y - boss_center_y
+            distance = math.sqrt(dx**2 + dy**2)
+
+            # 如果子彈在檢測範圍內
+            if distance <= self.dodge_detection_range:
+
+                # 預測子彈會朝Boss方向移動
+                if abs(bullet_velocity_x) > 0:
+                    time_to_impact = abs(dx / bullet_velocity_x)
+                    predicted_y = bullet_y + bullet_velocity_y * time_to_impact
+
+                    # 如果預測軌跡會經過Boss位置
+                    if abs(predicted_y - boss_center_y) < self.height:
+                        # 決定躲避方向（垂直於子彈方向）
+                        if bullet_velocity_x > 0:  # 子彈向右，Boss向左或上下躲
+                            self.dodge_direction = -1
+                        else:  # 子彈向左，Boss向右或上下躲
+                            self.dodge_direction = 1
+
+                        # 開始躲避
+                        self.is_dodging = True
+                        self.dodge_timer = 0.8  # 躲避持續時間
+                        print(f"🛡️ 狙擊Boss檢測到子彈，開始躲避！")
+                        return True
+
+        return False
+
+    def update_dodge_state(self):
+        """
+        更新躲避狀態\n
+        """
+        if self.is_dodging:
+            self.dodge_timer -= 1 / 60  # 假設60 FPS
+
+            # 執行躲避移動
+            dodge_speed = self.current_speed * self.dodge_speed_multiplier
+            self.velocity_x = self.dodge_direction * dodge_speed
+
+            # 結束躲避
+            if self.dodge_timer <= 0:
+                self.is_dodging = False
+                self.dodge_direction = 0
+                print(f"🛡️ 狙擊Boss躲避結束")
+
+    def auto_heal(self):
+        """
+        自動回血機制\n
+        """
+        current_time = time.time()
+        if current_time - self.last_heal_time >= self.heal_cooldown:
+            if self.health < self.max_health:
+                old_health = self.health
+                self.health = min(self.max_health, self.health + self.heal_amount)
+                if self.health > old_health:
+                    print(f"💚 狙擊Boss回血：{old_health} → {self.health}")
+
+            self.last_heal_time = current_time
+
+    def update_jump_state(self):
+        """
+        更新跳躍震波攻擊狀態\n
+        """
+        if not self.is_jumping:
+            return
+
+        if self.jump_phase == "prepare":
+            self.jump_timer -= 1 / 60
+            if self.jump_timer <= 0:
+                self.jump_phase = "jumping"
+
+        elif self.jump_phase == "jumping":
+            # 檢查是否落地
+            if self.on_ground and self.velocity_y >= 0:
+                self.jump_phase = "landing"
+                # 產生震波
+                self.create_shockwave()
+
+        elif self.jump_phase == "landing":
+            # 震波攻擊完成
+            self.is_jumping = False
+            self.jump_phase = "prepare"
+
+    def attack_player(self, player):
+        """
+        狙擊Boss的綜合攻擊方式\n
+        \n
+        參數:\n
+        player (Player): 目標玩家\n
+        \n
+        回傳:\n
+        bool: True 表示攻擊成功\n
+        """
+        # 優先使用追蹤子彈
+        if self.create_tracking_bullet(player.x, player.y):
+            return True
+
+        # 嘗試震波攻擊
+        if self.perform_shockwave_attack(player):
+            return True
+
+        # 最後嘗試近戰攻擊
+        return super().attack_player(player)
+
+    def update_ai(self, player, platforms):
+        """
+        狙擊Boss的AI行為 - 更複雜的戰術行為\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        platforms (list): 平台列表\n
+        """
+        if not self.is_alive:
+            return
+
+        # 檢測玩家
+        player_detected = self.detect_player(player)
+
+        # 計算與玩家的距離
+        dx = player.x - self.x
+        dy = player.y - self.y
+        distance = math.sqrt(dx**2 + dy**2)
+
+        # 更積極的攻擊邏輯
+        if player_detected:
+            # 優先考慮追蹤子彈攻擊
+            current_time = time.time()
+            if (
+                current_time - self.last_tracking_bullet_time
+                >= self.tracking_bullet_cooldown
+            ):
+                self.ai_state = "attack"
+                self.create_tracking_bullet(player.x, player.y)
+
+            # 如果距離合適，考慮震波攻擊
+            elif (
+                distance <= 300
+                and current_time - self.last_shockwave_time >= self.shockwave_cooldown
+            ):
+                self.ai_state = "attack"
+                self.perform_shockwave_attack(player)
+
+            # 一般攻擊檢查
+            elif self.can_attack_player(player):
+                self.ai_state = "attack"
+                self.attack_player(player)
+
+            # 追擊玩家
+            else:
+                self.ai_state = "chase"
+                self.move_towards_player(player)
+        else:
+            # 巡邏模式
+            self.ai_state = "patrol"
+            self.patrol_movement()
+
+        # 保持與玩家的戰術距離（如果太近就後退）
+        if distance < 80 and not self.is_jumping:
+            retreat_direction = -1 if dx > 0 else 1
+            self.velocity_x = retreat_direction * self.current_speed * 0.8
+
+    def update(self, player, platforms, bullets=None):
+        """
+        狙擊Boss的更新方法\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        platforms (list): 平台列表\n
+        bullets (list): 玩家子彈列表（可選）\n
+        """
+        super().update(player, platforms)
+
+        if self.is_alive:
+            # 更新追蹤子彈
+            self.update_tracking_bullets(player)
+
+            # 檢查追蹤子彈碰撞
+            self.check_tracking_bullet_collision(player)
+
+            # 更新震波
+            self.update_shockwaves(player)
+
+            # 更新跳躍狀態
+            self.update_jump_state()
+
+            # 更新躲避狀態
+            self.update_dodge_state()
+
+            # 執行自動回血
+            self.auto_heal()
+
+            # 檢測子彈並躲避
+            if bullets:
+                self.detect_and_dodge_bullets(bullets)
+
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製狙擊Boss和所有特效\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 要繪製到的螢幕表面\n
+        camera_x (int): 攝影機 x 偏移\n
+        camera_y (int): 攝影機 y 偏移\n
+        """
+        if not self.is_alive:
+            return
+
+        # 計算螢幕位置
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # 根據狀態改變Boss顏色
+        current_color = self.color
+        if self.is_dodging:
+            # 躲避時變成藍色
+            current_color = CYAN
+        elif self.is_jumping:
+            # 跳躍時變成橙色
+            current_color = ORANGE
+
+        # 繪製Boss本體
+        boss_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
+        pygame.draw.rect(screen, current_color, boss_rect)
+
+        # 繪製Boss標記邊框
+        pygame.draw.rect(screen, YELLOW, boss_rect, 4)
+
+        # 繪製生命值條（更大的生命值條）
+        bar_width = self.width + 20
+        bar_height = 8
+        bar_x = screen_x - 10
+        bar_y = screen_y - bar_height - 15
+
+        # 背景（紅色）
+        bg_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+        pygame.draw.rect(screen, RED, bg_rect)
+
+        # 當前生命值（綠色）
+        health_ratio = self.health / self.max_health
+        health_width = int(bar_width * health_ratio)
+        health_rect = pygame.Rect(bar_x, bar_y, health_width, bar_height)
+        pygame.draw.rect(screen, GREEN, health_rect)
+
+        # 繪製"SNIPER BOSS"標籤
+        font = get_chinese_font(FONT_SIZE_SMALL)
+        boss_text = font.render("🎯 SNIPER BOSS", True, RED)
+        text_rect = boss_text.get_rect()
+        text_rect.centerx = screen_x + self.width // 2
+        text_rect.bottom = bar_y - 5
+        screen.blit(boss_text, text_rect)
+
+        # 繪製追蹤子彈
+        for bullet in self.tracking_bullets:
+            bullet_screen_x = bullet["x"] - camera_x
+            bullet_screen_y = bullet["y"] - camera_y
+            # 只繪製在螢幕範圍內的追蹤子彈
+            if (
+                -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
+                and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
+            ):
+                # 繪製追蹤子彈：紫色外圈和白色內圈
+                pygame.draw.circle(
+                    screen, PURPLE, (int(bullet_screen_x), int(bullet_screen_y)), 8
+                )
+                pygame.draw.circle(
+                    screen, WHITE, (int(bullet_screen_x), int(bullet_screen_y)), 4
+                )
+
+        # 繪製震波
+        for shockwave in self.shockwaves:
+            shockwave_screen_x = shockwave["x"] - camera_x
+            shockwave_screen_y = shockwave["y"] - camera_y
+
+            # 只繪製在螢幕範圍內的震波
+            if (
+                -200 <= shockwave_screen_x <= SCREEN_WIDTH + 200
+                and -200 <= shockwave_screen_y <= SCREEN_HEIGHT + 200
+            ):
+                # 繪製震波圓圈（透明效果用多層圓圈模擬）
+                for i in range(3):
+                    alpha_factor = 1.0 - (i * 0.3)
+                    wave_color = tuple(int(c * alpha_factor) for c in YELLOW)
+                    pygame.draw.circle(
+                        screen,
+                        wave_color,
+                        (int(shockwave_screen_x), int(shockwave_screen_y)),
+                        int(shockwave["radius"] - i * 5),
+                        3,
+                    )
 
 
 ######################龍捲風怪類別######################

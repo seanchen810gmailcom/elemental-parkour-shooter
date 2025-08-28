@@ -7,10 +7,10 @@ import math
 # 支援直接執行和模組執行兩種方式
 try:
     from ..config import *
-    from ..entities.monsters import LavaMonster, WaterMonster
+    from ..entities.monsters import LavaMonster, WaterMonster, SniperBoss
 except ImportError:
     from src.config import *
-    from src.entities.monsters import LavaMonster, WaterMonster
+    from src.entities.monsters import LavaMonster, WaterMonster, SniperBoss
 
 ######################怪物管理器類別######################
 
@@ -35,6 +35,10 @@ class MonsterManager:
         self.monsters_killed = 0  # 擊殺數量
         self.boss_spawned = False  # Boss是否已生成
         self.boss = None  # Boss實例
+        self.boss_stage = 1  # Boss階段：1=岩漿Boss, 2=狙擊Boss
+        self.boss_transition_timer = 0  # Boss轉換延遲計時器
+        self.boss_transition_delay = 3.0  # Boss轉換延遲時間（3秒）
+        self.waiting_for_boss_transition = False  # 是否正在等待Boss轉換
 
         # 怪物類型比例（隨波次調整）- 移除粉紫色怪物TornadoMonster
         self.monster_types = [LavaMonster, WaterMonster]  # 只保留熔岩怪和水怪
@@ -199,14 +203,27 @@ class MonsterManager:
         回傳:\n
         bool: True 表示應該生成Boss\n
         """
-        # 每擊殺7個怪物生成一次Boss（原本10個）- 更頻繁的Boss戰
-        if self.monsters_killed >= 7 and not self.boss_spawned:
+        # Boss必須等玩家擊敗10個小怪後才能出現
+        if self.monsters_killed < 10:
+            return False
+
+        # 第一階段：岩漿Boss
+        if self.boss_stage == 1 and not self.boss_spawned:
             return True
+
+        # 第二階段：狙擊Boss（需要等待轉換延遲）
+        elif (
+            self.boss_stage == 2
+            and not self.boss_spawned
+            and not self.waiting_for_boss_transition
+        ):
+            return True
+
         return False
 
     def spawn_boss(self, platforms):
         """
-        生成Boss怪物\n
+        生成Boss怪物 - 根據階段生成不同Boss\n
         \n
         參數:\n
         platforms (list): 平台列表\n
@@ -224,42 +241,87 @@ class MonsterManager:
 
         spawn_x, spawn_y, platform = spawn_result
 
-        # 創建Boss（使用LavaMonster作為基礎，但增強屬性）
-        self.boss = LavaMonster(spawn_x, spawn_y)
+        # 根據Boss階段生成不同類型的Boss
+        if self.boss_stage == 1:
+            # 第一階段：岩漿Boss
+            self.boss = LavaMonster(spawn_x, spawn_y)
 
-        # 調整Boss體積為兩倍大
-        self.boss.width = LAVA_MONSTER_WIDTH * BOSS_WIDTH_MULTIPLIER
-        self.boss.height = LAVA_MONSTER_HEIGHT * BOSS_HEIGHT_MULTIPLIER
+            # 調整Boss體積為兩倍大
+            self.boss.width = LAVA_MONSTER_WIDTH * BOSS_WIDTH_MULTIPLIER
+            self.boss.height = LAVA_MONSTER_HEIGHT * BOSS_HEIGHT_MULTIPLIER
 
-        # Boss血量設定為1500（提升難度）
-        self.boss.max_health = 1500
-        self.boss.health = self.boss.max_health
+            # Boss血量設定為1500（提升難度）
+            self.boss.max_health = 1500
+            self.boss.health = self.boss.max_health
 
-        # Boss攻擊力大幅提升
-        self.boss.damage = LAVA_MONSTER_DAMAGE * 2.0  # 從1.5倍提升到2.0倍
+            # Boss攻擊力大幅提升
+            self.boss.damage = LAVA_MONSTER_DAMAGE * 2.0
 
-        # Boss射擊頻率更高（從1.5秒改為1.0秒）
-        self.boss.lava_ball_cooldown = 1.0
+            # Boss射擊頻率更高（從1.5秒改為1.0秒）
+            self.boss.lava_ball_cooldown = 1.0
 
-        # 添加火焰子彈功能 - 提升攻擊頻率
-        self.boss.fire_bullet_cooldown = 1.5  # 火焰子彈冷卻時間（從2.0秒提升到1.5秒）
-        self.boss.last_fire_bullet_time = 0
-        self.boss.fire_bullets = []  # 火焰子彈列表
+            # 為岩漿Boss添加回血機制
+            self.boss.heal_cooldown = 5.0  # 每5秒回血一次
+            self.boss.last_heal_time = 0
+            self.boss.heal_amount = 2  # 每次回血2點
 
-        # 設定Boss標記
+            # 添加火焰子彈功能 - 提升攻擊頻率
+            self.boss.fire_bullet_cooldown = 1.5
+            self.boss.last_fire_bullet_time = 0
+            self.boss.fire_bullets = []
+
+            self.boss.monster_type = "boss_lava_monster"
+            print(f"🔥 第一階段Boss - 岩漿怪王 出現！血量是一般怪物的3倍！")
+
+        elif self.boss_stage == 2:
+            # 第二階段：狙擊Boss
+            self.boss = SniperBoss(spawn_x, spawn_y)
+            print(f"🎯 最終Boss - 狙擊Boss已生成！具備追蹤子彈、震波攻擊和躲避能力！")
+
+            # 狙擊Boss出現時同時生成3個額外小怪
+            self.spawn_additional_monsters_for_sniper_boss(platforms)
+
+        # 共同Boss設定
         self.boss.is_boss = True
-        self.boss.monster_type = "boss_lava_monster"
-
-        # Boss所在平台
         self.boss.home_platform = platform
-
         self.boss_spawned = True
-        print(
-            "🔥 Boss 岩漿怪王 出現！血量是一般怪物的3倍，能發射熔岩球和火焰子彈攻擊！"
-        )
+
         return self.boss
 
-    def update(self, player, platforms, dt):
+    def spawn_additional_monsters_for_sniper_boss(self, platforms):
+        """
+        為狙擊Boss生成3個額外的小怪\n
+        \n
+        參數:\n
+        platforms (list): 平台列表\n
+        """
+        additional_monsters_count = 3
+        spawned_count = 0
+
+        for _ in range(additional_monsters_count):
+            # 獲取生成位置
+            spawn_result = self.get_spawn_position(platforms)
+            if spawn_result is None:
+                continue
+
+            spawn_x, spawn_y, platform = spawn_result
+
+            # 隨機選擇怪物類型
+            monster_class = random.choice(self.monster_types)
+            new_monster = monster_class(spawn_x, spawn_y)
+
+            # 設定怪物所在平台
+            new_monster.home_platform = platform
+
+            # 根據波次調整怪物屬性
+            self.adjust_monster_stats(new_monster)
+
+            self.monsters.append(new_monster)
+            spawned_count += 1
+
+        print(f"🎯 狙擊Boss出現時額外生成了 {spawned_count} 個小怪！")
+
+    def update(self, player, platforms, dt, bullets=None):
         """
         更新所有怪物和管理器狀態\n
         \n
@@ -267,6 +329,7 @@ class MonsterManager:
         player (Player): 玩家物件\n
         platforms (list): 平台列表\n
         dt (float): 距離上次更新的時間（秒）\n
+        bullets (list): 玩家子彈列表（可選，用於Boss躲避）\n
         \n
         回傳:\n
         dict: 更新結果資訊\n
@@ -277,9 +340,15 @@ class MonsterManager:
 
         # 更新Boss（如果存在）
         if self.boss:
-            self.boss.update(player, platforms)
-            # 處理Boss的火焰子彈邏輯
-            self.update_boss_fire_bullets(player)
+            # 如果是狙擊Boss，需要傳入子彈資訊
+            if hasattr(self.boss, "tracking_bullets"):  # 狙擊Boss的標識
+                self.boss.update(player, platforms, bullets)
+            else:
+                self.boss.update(player, platforms)
+
+            # 處理岩漿Boss的火焰子彈邏輯（只針對岩漿Boss）
+            if hasattr(self.boss, "fire_bullets"):
+                self.update_boss_fire_bullets(player)
 
         # 移除死亡怪物（包含Boss）
         killed_this_frame = self.remove_dead_monsters()
@@ -295,12 +364,39 @@ class MonsterManager:
         boss_defeated = False
         boss_death_x = 0
         boss_death_y = 0
+        sniper_boss_defeated = False  # 狙擊Boss是否被擊敗（觸發勝利）
+
         if self.boss and not self.boss.is_alive:
-            print("🎉 Boss已被擊敗！勝利星星將出現！")
-            boss_defeated = True
+            boss_type = (
+                "狙擊Boss" if hasattr(self.boss, "tracking_bullets") else "岩漿Boss"
+            )
             boss_death_x = self.boss.x
             boss_death_y = self.boss.y
+
+            if self.boss_stage == 1:
+                # 岩漿Boss被擊敗，啟動轉換延遲機制
+                print(f"🔥 第一階段Boss已被擊敗！將在3秒後出現最終Boss...")
+                self.boss_stage = 2
+                self.boss_spawned = False  # 重置以生成下一階段Boss
+                self.waiting_for_boss_transition = True  # 開始等待轉換
+                self.boss_transition_timer = 0  # 重置轉換計時器
+                boss_defeated = False  # 不觸發勝利
+
+            elif self.boss_stage == 2:
+                # 狙擊Boss被擊敗，真正的勝利
+                print(f"🎉 最終Boss - 狙擊Boss已被擊敗！真正的勝利！")
+                boss_defeated = True
+                sniper_boss_defeated = True
+
             self.boss = None
+
+        # 處理Boss轉換延遲
+        if self.waiting_for_boss_transition:
+            self.boss_transition_timer += dt
+            if self.boss_transition_timer >= self.boss_transition_delay:
+                # 轉換延遲結束，可以生成狙擊Boss
+                self.waiting_for_boss_transition = False
+                print(f"⏰ Boss轉換延遲結束，狙擊Boss可以生成了！")
 
         # 更新生成計時器並嘗試生成新怪物（如果沒有Boss）
         new_monster = None
@@ -311,6 +407,7 @@ class MonsterManager:
             "monsters_killed": killed_this_frame,
             "boss_spawned": boss_spawned,
             "boss_defeated": boss_defeated,
+            "sniper_boss_defeated": sniper_boss_defeated,  # 新增：狙擊Boss擊敗標記
             "boss_death_x": boss_death_x,
             "boss_death_y": boss_death_y,
             "new_monster": new_monster is not None,
@@ -496,41 +593,46 @@ class MonsterManager:
         if self.boss:
             self.boss.draw(screen, camera_x, camera_y)
 
-            # 特別標示Boss
+            # 特別標示Boss（根據Boss類型顯示不同標籤）
             boss_screen_x = self.boss.x - camera_x
             boss_screen_y = self.boss.y - camera_y
 
-            # 在Boss上方顯示"BOSS"文字
             font = get_chinese_font(FONT_SIZE_MEDIUM)
-            boss_text = font.render("BOSS", True, RED)
+
+            if hasattr(self.boss, "tracking_bullets"):  # 狙擊Boss
+                boss_text = font.render("🎯 SNIPER BOSS", True, PURPLE)
+            else:  # 岩漿Boss
+                boss_text = font.render("🔥 LAVA BOSS", True, RED)
+
+                # 繪製岩漿Boss的火焰子彈
+                if hasattr(self.boss, "fire_bullets"):
+                    for bullet in self.boss.fire_bullets:
+                        bullet_screen_x = bullet["x"] - camera_x
+                        bullet_screen_y = bullet["y"] - camera_y
+                        # 只繪製在螢幕範圍內的火焰子彈
+                        if (
+                            -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
+                            and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
+                        ):
+                            # 繪製火焰子彈：橘紅色外圈和黃色內圈
+                            pygame.draw.circle(
+                                screen,
+                                FIRE_BULLET_COLOR,
+                                (int(bullet_screen_x), int(bullet_screen_y)),
+                                8,
+                            )
+                            pygame.draw.circle(
+                                screen,
+                                YELLOW,
+                                (int(bullet_screen_x), int(bullet_screen_y)),
+                                4,
+                            )
+
+            # 繪製Boss標籤
             text_rect = boss_text.get_rect()
             text_rect.centerx = boss_screen_x + self.boss.width // 2
             text_rect.bottom = boss_screen_y - 10
             screen.blit(boss_text, text_rect)
-
-            # 繪製Boss的火焰子彈
-            if hasattr(self.boss, "fire_bullets"):
-                for bullet in self.boss.fire_bullets:
-                    bullet_screen_x = bullet["x"] - camera_x
-                    bullet_screen_y = bullet["y"] - camera_y
-                    # 只繪製在螢幕範圍內的火焰子彈
-                    if (
-                        -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
-                        and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
-                    ):
-                        # 繪製火焰子彈：橘紅色外圈和黃色內圈
-                        pygame.draw.circle(
-                            screen,
-                            FIRE_BULLET_COLOR,
-                            (int(bullet_screen_x), int(bullet_screen_y)),
-                            8,
-                        )
-                        pygame.draw.circle(
-                            screen,
-                            YELLOW,
-                            (int(bullet_screen_x), int(bullet_screen_y)),
-                            4,
-                        )
 
     def get_monster_count(self):
         """
@@ -580,6 +682,13 @@ class MonsterManager:
         # 重置計時器和計數器
         self.spawn_timer = 0
         self.monsters_killed = 0
+
+        # 重置Boss相關狀態
+        self.boss_spawned = False
+        self.boss = None
+        self.boss_stage = 1  # 重置Boss階段為第一階段
+        self.boss_transition_timer = 0  # 重置Boss轉換計時器
+        self.waiting_for_boss_transition = False  # 重置Boss轉換等待狀態
 
         # 保持當前波次但可選擇重置
         # self.wave_number = 1  # 如果要重置波次的話

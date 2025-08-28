@@ -101,13 +101,16 @@ class Bullet(GameObject):
         1. 根據方向和速度移動子彈\n
         2. 計算飛行距離\n
         3. 檢查是否超出射程\n
-        4. 雷電追蹤邏輯\n
+        4. 雷電追蹤邏輯（分階段執行）\n
         """
         if not self.is_active:
             return
 
-        # 雷電追蹤邏輯
-        if self.bullet_type == "lightning_tracking" and targets:
+        # 雷電追蹤的階段性邏輯
+        if self.bullet_type == "lightning_tracking":
+            self.update_lightning_phases(targets)
+        # 一般子彈的追蹤邏輯（保持原有功能）
+        elif self.bullet_type == "lightning_tracking" and targets:
             self.update_tracking(targets)
 
         # 根據方向向量移動子彈
@@ -125,6 +128,107 @@ class Bullet(GameObject):
 
         # 更新碰撞矩形
         self.update_rect()
+
+    def update_lightning_phases(self, targets):
+        """
+        更新雷電子彈的階段性行為\n
+        \n
+        階段1：往上飛行到指定高度\n
+        階段2：追蹤分配的目標往下衝\n
+        \n
+        參數:\n
+        targets (list): 可能的追蹤目標列表\n
+        """
+        if not hasattr(self, "phase"):
+            # 如果沒有階段屬性，初始化為追蹤模式（兼容舊子彈）
+            self.phase = "tracking"
+
+        if self.phase == "ascending":
+            # 階段1：往上飛行
+            # 計算已上升的距離
+            self.ascent_distance += self.speed
+
+            # 檢查是否達到最大上升高度
+            if self.ascent_distance >= self.max_ascent:
+                # 切換到追蹤階段
+                self.phase = "tracking"
+                # 增加下降時的速度，讓攻擊更有衝擊感
+                self.speed = self.original_speed * 1.5
+
+        elif self.phase == "tracking":
+            # 階段2：追蹤目標
+            # 優先使用分配的目標
+            target_to_track = None
+
+            if hasattr(self, "assigned_target") and self.assigned_target:
+                # 檢查分配的目標是否還在目標列表中（還活著）
+                if self.assigned_target in targets:
+                    target_to_track = self.assigned_target
+
+            # 如果沒有分配目標或分配目標已死亡，找最近的目標
+            if not target_to_track and targets:
+                closest_target = None
+                closest_distance = float("inf")
+
+                for target in targets:
+                    # 計算到目標的距離
+                    target_center_x = target.x + getattr(target, "width", 0) // 2
+                    target_center_y = target.y + getattr(target, "height", 0) // 2
+
+                    dx = target_center_x - self.x
+                    dy = target_center_y - self.y
+                    distance = math.sqrt(dx**2 + dy**2)
+
+                    # 在追蹤範圍內且是最近的目標
+                    if distance <= self.tracking_range and distance < closest_distance:
+                        closest_target = target
+                        closest_distance = distance
+
+                target_to_track = closest_target
+
+            # 如果找到目標，進行積極追蹤
+            if target_to_track:
+                self.tracking_target = target_to_track
+                target_center_x = (
+                    target_to_track.x + getattr(target_to_track, "width", 0) // 2
+                )
+                target_center_y = (
+                    target_to_track.y + getattr(target_to_track, "height", 0) // 2
+                )
+
+                # 計算到目標的方向
+                dx = target_center_x - self.x
+                dy = target_center_y - self.y
+                distance = math.sqrt(dx**2 + dy**2)
+
+                if distance > 0:
+                    # 標準化目標方向
+                    target_dir_x = dx / distance
+                    target_dir_y = dy / distance
+
+                    # 計算強烈的轉向 - 直接設定方向而不是漸進式轉向
+                    turn_intensity = 0.9  # 提高轉向強度，讓追蹤更精準
+
+                    # 如果距離很近，直接指向目標
+                    if distance < 80:
+                        self.direction_x = target_dir_x
+                        self.direction_y = target_dir_y
+                    else:
+                        # 距離較遠時使用快速轉向
+                        self.direction_x += (
+                            target_dir_x - self.direction_x
+                        ) * turn_intensity
+                        self.direction_y += (
+                            target_dir_y - self.direction_y
+                        ) * turn_intensity
+
+                    # 重新標準化方向向量，保持速度一致
+                    current_length = math.sqrt(
+                        self.direction_x**2 + self.direction_y**2
+                    )
+                    if current_length > 0:
+                        self.direction_x /= current_length
+                        self.direction_y /= current_length
 
     def update_tracking(self, targets):
         """
@@ -337,11 +441,13 @@ class WeaponManager:
 
     def create_ultimate(self, ultimate_info, targets=None):
         """
-        根據玩家必殺技資訊建立雷電追蹤子彈 - 智能目標分配\n
+        根據玩家必殺技資訊建立雷電追蹤子彈 - 先往上扇形發射，再追蹤目標\n
         \n
         策略:\n
-        - 多怪物(>=2): 5顆子彈分散攻擊不同怪物\n
-        - 單怪物(1): 5顆子彈集中攻擊同一怪物\n
+        - 階段1：5顆子彈以扇形往上飛行（角度向上傾斜45-135度）\n
+        - 階段2：到達高點後智能分配不同怪物進行追蹤攻擊\n
+        - 多怪物(>=2): 分散攻擊不同怪物\n
+        - 單怪物(1): 集中攻擊同一怪物\n
         - 無怪物(0): 子彈朝預設方向發射\n
         \n
         參數:\n
@@ -358,16 +464,16 @@ class WeaponManager:
 
         # 處理五顆子彈的情況
         if isinstance(ultimate_info, list):
-            # 扇型發射角度設定
-            fan_angle = math.pi / 3  # 60度扇形角度
-            start_angle = -fan_angle / 2  # 從-30度開始
-            angle_step = fan_angle / 4  # 每顆子彈間隔15度
+            # 扇型往上發射角度設定（從左上45度到右上135度）
+            fan_angle = math.pi / 2  # 90度扇形角度，往上發射
+            start_angle = math.pi / 4  # 從45度開始（左上）
+            angle_step = fan_angle / 4  # 每顆子彈間隔22.5度
 
             for i, info in enumerate(ultimate_info):
-                # 計算扇型發射的初始方向
+                # 計算扇型往上發射的初始方向
                 bullet_angle = start_angle + (i * angle_step)
                 initial_direction_x = math.cos(bullet_angle)
-                initial_direction_y = math.sin(bullet_angle)
+                initial_direction_y = -math.sin(bullet_angle)  # 負號表示往上
 
                 lightning_bullet = Bullet(
                     info["start_x"],
@@ -382,15 +488,25 @@ class WeaponManager:
                 lightning_bullet.speed = info["speed"]
                 lightning_bullet.bullet_id = info.get("bullet_id", 0)
 
-                # 立即分配追蹤目標
+                # 新增階段控制屬性
+                lightning_bullet.phase = "ascending"  # 初始階段：往上飛行
+                lightning_bullet.ascent_distance = 0  # 已上升距離
+                lightning_bullet.max_ascent = 200  # 最大上升距離
+                lightning_bullet.original_speed = info["speed"]  # 保存原始速度
+
+                # 智能目標分配策略
                 if targets:
                     if len(targets) == 1:
                         # 單怪物：所有子彈都追蹤同一目標
                         lightning_bullet.assigned_target = targets[0]
-                    else:
-                        # 多怪物：循環分配不同目標
+                    elif len(targets) >= 2:
+                        # 多怪物：優先確保每個怪物至少被一顆子彈攻擊
                         target_index = i % len(targets)
                         lightning_bullet.assigned_target = targets[target_index]
+                        # 記錄這個目標已被分配
+                        if not hasattr(targets[target_index], "assigned_bullet_count"):
+                            targets[target_index].assigned_bullet_count = 0
+                        targets[target_index].assigned_bullet_count += 1
                 else:
                     lightning_bullet.assigned_target = None
 

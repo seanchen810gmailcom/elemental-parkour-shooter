@@ -128,6 +128,11 @@ class Player(GameObject):
         self.ultimate_cooldown = 20.0  # 必殺技冷卻時間：20秒
         self.pending_ultimate = None  # 待發射的必殺技
 
+        # 回血系統
+        self.heal_cooldown = 20.0  # 每20秒回血一次
+        self.last_heal_time = time.time()  # 上次回血時間
+        self.heal_amount = 10  # 每次回血量
+
     def handle_input(self, keys, mouse_buttons, camera_x=0, camera_y=0):
         """
         處理玩家輸入 - 將鍵盤滑鼠輸入轉換為動作\n
@@ -409,9 +414,13 @@ class Player(GameObject):
         3. 碰撞檢測和處理\n
         4. 邊界檢查\n
         5. 更新安全位置\n
+        6. 自動回血\n
         """
         # 更新狀態效果
         self.update_status_effects()
+
+        # 自動回血
+        self.auto_heal()
 
         # 計算移動速度修正（受狀態效果影響）
         speed_modifier = self.get_speed_modifier()
@@ -689,6 +698,20 @@ class Player(GameObject):
         self.health += amount
         if self.health > self.max_health:
             self.health = self.max_health
+
+    def auto_heal(self):
+        """
+        自動回血機制 - 每20秒回復10點生命值\n
+        """
+        current_time = time.time()
+        if current_time - self.last_heal_time >= self.heal_cooldown:
+            if self.health < self.max_health and self.is_alive:
+                old_health = self.health
+                self.health = min(self.max_health, self.health + self.heal_amount)
+                if self.health > old_health:
+                    print(f"💚 玩家自動回血：{old_health} → {self.health}")
+
+                self.last_heal_time = current_time
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """

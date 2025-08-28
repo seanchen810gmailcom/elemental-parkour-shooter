@@ -106,6 +106,14 @@ TORNADO_MONSTER_SPEED = 10  # 提升移動速度 8→10
 TORNADO_MONSTER_HEALTH = 65  # 提升血量 40→65 (+62.5%)
 TORNADO_MONSTER_DAMAGE = 50  # 提升傷害 35→50 (+43%)
 
+# 狙擊Boss
+SNIPER_BOSS_WIDTH = 65
+SNIPER_BOSS_HEIGHT = 80
+SNIPER_BOSS_COLOR = (150, 0, 150)  # 深紫色
+SNIPER_BOSS_SPEED = 6  # 中等移動速度
+SNIPER_BOSS_HEALTH = 1500  # 與岩漿Boss相同的血量
+SNIPER_BOSS_DAMAGE = 60  # 高攻擊力
+
 ######################Boss設定######################
 
 # 熔岩龍捲怪 Boss
@@ -192,6 +200,44 @@ DEATH_RETRY_TEXT = "按 R 重新開始"
 DEATH_QUIT_TEXT = "按 ESC 離開遊戲"
 DEATH_LIVES_TEXT = "剩餘生命"
 DEATH_FINAL_SCORE_TEXT = "最終分數"
+
+######################背景與環境設定######################
+
+# 雲朵系統設定
+CLOUD_COUNT = 20  # 總雲朵數量
+CLOUD_MIN_SIZE = 0.6  # 最小雲朵大小倍數
+CLOUD_MAX_SIZE = 1.8  # 最大雲朵大小倍數
+CLOUD_MIN_SPEED = 0.5  # 最小移動速度
+CLOUD_MAX_SPEED = 2.0  # 最大移動速度
+CLOUD_RESPAWN_DISTANCE = 200  # 雲朵重生距離
+
+# 雲朵系統顏色設定
+CLOUD_BACKGROUND_COLOR = (255, 255, 255, 180)  # 背景層雲朵顏色（純白半透明）
+CLOUD_FOREGROUND_COLOR = (255, 255, 255, 220)  # 前景層雲朵顏色（純白較不透明）
+
+# 天空背景顏色
+SKY_COLOR = (135, 206, 235)  # 天藍色
+
+######################小地圖設定######################
+
+# 小地圖尺寸和位置
+MINIMAP_WIDTH = 200  # 小地圖寬度
+MINIMAP_HEIGHT = 150  # 小地圖高度
+MINIMAP_MARGIN = 15  # 距離螢幕邊緣的間距
+
+# 小地圖顏色設定
+MINIMAP_BG_COLOR = (0, 0, 0, 120)  # 半透明黑色背景
+MINIMAP_BORDER_COLOR = (255, 255, 255, 200)  # 白色邊框
+MINIMAP_PLAYER_COLOR = (0, 255, 0)  # 綠色玩家點
+MINIMAP_BOSS_COLOR = (255, 0, 255)  # 紫色Boss點
+MINIMAP_STAR_COLOR = (255, 255, 0)  # 黃色星星
+MINIMAP_PLATFORM_COLOR = (100, 100, 100)  # 灰色平台
+
+# 小地圖怪物顏色映射
+MINIMAP_LAVA_MONSTER_COLOR = (255, 100, 0)  # 橘紅色岩漿怪
+MINIMAP_WATER_MONSTER_COLOR = (0, 150, 255)  # 藍色水怪
+MINIMAP_TORNADO_MONSTER_COLOR = (200, 200, 255)  # 淺藍色龍捲風怪
+MINIMAP_DEFAULT_MONSTER_COLOR = (255, 0, 0)  # 預設紅色
 
 ######################字體設定######################
 

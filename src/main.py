@@ -17,6 +17,7 @@ try:
     from .systems.monster_manager import MonsterManager
     from .systems.damage_display import DamageDisplayManager
     from .systems.level_system import LevelManager
+    from .utils.cloud_system import CloudSystem
 except ImportError:
     # 直接執行時使用絕對導入
     from src.config import *
@@ -26,6 +27,7 @@ except ImportError:
     from src.systems.monster_manager import MonsterManager
     from src.systems.damage_display import DamageDisplayManager
     from src.systems.level_system import LevelManager
+    from src.utils.cloud_system import CloudSystem
 
 ######################遊戲主類別######################
 
@@ -84,12 +86,18 @@ class ElementalParkourShooter:
         self.damage_display = DamageDisplayManager()  # 傷害顯示管理器
         self.level_manager = LevelManager()  # 關卡場景管理器
 
+        # 初始化背景和UI系統
+        self.cloud_system = CloudSystem(
+            self.level_manager.level_width, self.level_manager.level_height
+        )  # 雲朵背景系統
+
         # 攝影機系統
         self.camera_x = 0
         self.camera_y = 0
 
         # 時間管理
         self.last_update_time = time.time()
+        self.dt = 1 / 60  # 默認時間間隔
 
     def update_camera(self):
         """
@@ -149,6 +157,7 @@ class ElementalParkourShooter:
             current_time = time.time()
             dt = current_time - self.last_update_time
             self.last_update_time = current_time
+            self.dt = dt  # 儲存為實例變數以供其他方法使用
 
             # 更新玩家狀態
             if self.player.is_alive:
@@ -234,10 +243,16 @@ class ElementalParkourShooter:
             # 更新攝影機
             self.update_camera()
 
+            # 更新雲朵系統
+            self.cloud_system.update(dt, self.camera_x)
+
+            # 小地圖系統已移除
+
             # 更新怪物系統
             platforms = self.level_manager.get_platforms()
+            bullets = self.weapon_manager.bullets  # 獲取玩家子彈用於Boss躲避
             monster_update_result = self.monster_manager.update(
-                self.player, platforms, dt
+                self.player, platforms, dt, bullets
             )
 
             # 根據怪物擊殺數增加分數
@@ -250,15 +265,20 @@ class ElementalParkourShooter:
 
             # 檢查Boss是否被擊敗
             if monster_update_result["boss_defeated"]:
-                # Boss被擊敗後在Boss位置生成星星
-                boss_x = monster_update_result.get(
-                    "boss_death_x", self.level_manager.level_width // 2
-                )
-                boss_y = monster_update_result.get("boss_death_y", SCREEN_HEIGHT - 200)
-                self.level_manager.star_x = boss_x
-                self.level_manager.star_y = boss_y - 50
-                self.level_manager.star_collected = False
-                print("🌟 Boss被擊敗！勝利星星出現了！")
+                # 只有狙擊Boss被擊敗時才生成勝利星星
+                if monster_update_result.get("sniper_boss_defeated", False):
+                    boss_x = monster_update_result.get(
+                        "boss_death_x", self.level_manager.level_width // 2
+                    )
+                    boss_y = monster_update_result.get(
+                        "boss_death_y", SCREEN_HEIGHT - 200
+                    )
+                    self.level_manager.star_x = boss_x
+                    self.level_manager.star_y = boss_y - 50
+                    self.level_manager.star_collected = False
+                    print("🌟 最終Boss被擊敗！勝利星星出現了！")
+                else:
+                    print("🔥 第一階段Boss被擊敗，準備最終挑戰！")
 
             # Boss系統移除，簡化遊戲體驗
 
@@ -304,7 +324,7 @@ class ElementalParkourShooter:
 
             # 更新傷害顯示
             self.damage_display.update()
-            
+
         elif self.game_state == "death_screen":
             # 死亡畫面狀態 - 等待玩家按 R 重新開始
             # 這個狀態不需要更新遊戲邏輯，只是等待玩家輸入
@@ -327,6 +347,11 @@ class ElementalParkourShooter:
         self.damage_display = DamageDisplayManager()
         self.level_manager = LevelManager()
 
+        # 重新初始化背景和UI系統
+        self.cloud_system = CloudSystem(
+            self.level_manager.level_width, self.level_manager.level_height
+        )
+
         # 重置攝影機
         self.camera_x = 0
         self.camera_y = 0
@@ -348,6 +373,44 @@ class ElementalParkourShooter:
         5. UI 介面（血量、分數等）\n
         """
         if self.game_state == "playing":
+            # 先清空螢幕並繪製天空背景
+            self.screen.fill(SKY_COLOR)
+
+            # 繪製地面背景（在螢幕下方）
+            ground_height = SCREEN_HEIGHT // 4  # 地面佔螢幕下方1/4
+            ground_rect = pygame.Rect(
+                0, SCREEN_HEIGHT - ground_height, SCREEN_WIDTH, ground_height
+            )
+            pygame.draw.rect(self.screen, (101, 67, 33), ground_rect)  # 深棕色地面
+
+            # 繪製草地表面
+            grass_height = 10
+            grass_rect = pygame.Rect(
+                0,
+                SCREEN_HEIGHT - ground_height - grass_height,
+                SCREEN_WIDTH,
+                grass_height,
+            )
+            pygame.draw.rect(self.screen, (34, 139, 34), grass_rect)  # 草綠色
+
+            # 繪製遠山背景（在地平線上）
+            horizon_y = SCREEN_HEIGHT - ground_height - grass_height
+            for i in range(5):
+                mountain_x = i * (SCREEN_WIDTH // 4) - (self.camera_x * 0.1)  # 視差效果
+                mountain_height = 50 + i * 20
+                mountain_color = (64 + i * 10, 64 + i * 10, 80 + i * 10)  # 漸層灰藍色
+
+                # 繪製三角形山峰
+                mountain_points = [
+                    (mountain_x - 100, horizon_y),
+                    (mountain_x, horizon_y - mountain_height),
+                    (mountain_x + 100, horizon_y),
+                ]
+                pygame.draw.polygon(self.screen, mountain_color, mountain_points)
+
+            # 繪製雲朵背景（在所有其他物件之前）
+            self.cloud_system.draw(self.screen, self.camera_x, self.camera_y)
+
             # 繪製關卡場景（包含背景、平台和陷阱）
             self.level_manager.draw(self.screen, self.camera_x, self.camera_y)
 
@@ -372,11 +435,11 @@ class ElementalParkourShooter:
             self.player.draw_bullet_ui(self.screen)
             self.player.draw_ultimate_ui(self.screen)
 
-            # 繪製分數（移動到右上角，避免與血條重疊）
+            # 繪製分數（恢復到原始位置）
             score_font = get_chinese_font(FONT_SIZE_MEDIUM)
             score_text = score_font.render(f"分數: {self.score}", True, WHITE)
             score_rect = score_text.get_rect()
-            score_rect.topright = (SCREEN_WIDTH - 20, 20)  # 右上角位置
+            score_rect.topright = (SCREEN_WIDTH - 20, 20)  # 恢復到右上角原始位置
             self.screen.blit(score_text, score_rect)
 
         elif self.game_state == "victory":
