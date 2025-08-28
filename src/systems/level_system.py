@@ -443,12 +443,15 @@ class LevelManager:
         self.level_theme = "parkour"  # 跑酷主題
         self.platforms = []
         self.hazards = []  # 保留但不使用危險陷阱
+        self.health_pickups = []  # 愛心道具列表
+        self.spike_hazards = []  # 尖刺陷阱列表
         self.level_width = SCREEN_WIDTH * 10  # 無限寬度地圖 - 大幅擴展寬度
         self.level_height = SCREEN_HEIGHT * 15  # 高度大幅增加，容納30層
         self.total_levels = 30  # 總共30層
         self.star_collected = False  # 星星是否被收集
         self.star_x = 0  # 星星位置
         self.star_y = 0
+        self.star_visible = False  # 勝利星星是否可見（只有Boss被擊敗後才可見）
         # 在最右邊放置破關星星
         self.end_star_x = self.level_width - 100  # 在地圖最右邊的星星
         self.end_star_y = SCREEN_HEIGHT - 200
@@ -462,9 +465,17 @@ class LevelManager:
         # 清除舊的場景物件
         self.platforms = []
         self.hazards = []  # 不使用危險陷阱
+        self.health_pickups = []  # 清除舊的愛心道具
+        self.spike_hazards = []  # 清除舊的尖刺陷阱
 
         # 生成30層跑酷平台
         self.generate_parkour_platforms()
+
+        # 生成愛心道具
+        self.generate_health_pickups()
+
+        # 生成尖刺陷阱
+        self.generate_spike_hazards()
 
         # 在最高層放置目標星星
         self.place_target_star()
@@ -558,6 +569,66 @@ class LevelManager:
         star_platform = Platform(self.star_x - 150, star_y + 50, 300, 40)
         self.platforms.append(star_platform)
 
+    def generate_health_pickups(self):
+        """
+        在關卡中隨機生成愛心道具\n
+        """
+        # 生成10個愛心道具分佈在整個關卡中
+        pickup_count = 10
+
+        for _ in range(pickup_count):
+            # 60% 機率放在平台上，40% 機率放在地面上
+            if random.random() < 0.6 and len(self.platforms) > 2:
+                # 在平台上方放置愛心
+                platform = random.choice(self.platforms[1:-2])  # 排除地面和邊界牆
+                heart_x = platform.x + random.randint(20, max(21, platform.width - 40))
+                heart_y = platform.y - 30  # 在平台上方
+            else:
+                # 在地面上放置愛心
+                heart_x = random.randint(100, self.level_width - 100)
+                heart_y = SCREEN_HEIGHT - 80 - 30  # 在地面上
+
+            # 確保位置合理
+            if (
+                50 <= heart_x <= self.level_width - 50
+                and 50 <= heart_y <= self.level_height - 50
+            ):
+                health_pickup = HealthPickup(
+                    heart_x, heart_y, heal_amount=10
+                )  # 改為補10點血
+                self.health_pickups.append(health_pickup)
+
+    def generate_spike_hazards(self):
+        """
+        在關卡中隨機生成尖刺陷阱\n
+        """
+        # 生成6-10個尖刺陷阱分佈在關卡中（減少尖刺數量）
+        spike_count = random.randint(6, 10)
+
+        for _ in range(spike_count):
+            # 隨機選擇位置生成尖刺
+            spike_x = random.randint(200, self.level_width - 200)
+
+            # 尖刺可能在地面上或平台上
+            if random.random() < 0.6:  # 60% 機率在地面上
+                spike_y = SCREEN_HEIGHT - 80 - 30  # 在地面上
+            else:  # 40% 機率在平台附近
+                if len(self.platforms) > 2:
+                    platform = random.choice(self.platforms[1:-2])
+                    spike_x = platform.x + random.randint(
+                        0, max(1, platform.width - 40)
+                    )
+                    spike_y = platform.y - 30  # 在平台上方
+
+            # 確保位置合理
+            if (
+                100 <= spike_x <= self.level_width - 100
+                and 100 <= spike_y <= self.level_height - 100
+            ):
+                spike_width = random.randint(30, 60)
+                spike_hazard = SpikeHazard(spike_x, spike_y, spike_width, 30, damage=20)
+                self.spike_hazards.append(spike_hazard)
+
     def check_star_collision(self, player):
         """
         檢查玩家是否碰到目標星星（Boss星星或最右邊的破關星星）\n
@@ -568,8 +639,8 @@ class LevelManager:
         回傳:\n
         bool: 是否收集到星星\n
         """
-        # 檢查Boss星星
-        if not self.star_collected:
+        # 檢查Boss星星（只有在星星可見時才能碰撞）
+        if not self.star_collected and self.star_visible:
             star_size = 30
             star_rect = pygame.Rect(
                 self.star_x - star_size // 2,
@@ -609,12 +680,39 @@ class LevelManager:
         player (Player): 玩家物件\n
         bullets (list): 子彈列表\n
         """
+        # 更新愛心道具動畫並檢查碰撞
+        health_pickup_collected = False
+        for pickup in self.health_pickups:
+            pickup.update(dt)
+            if pickup.check_collision(player):
+                health_pickup_collected = True
+
+        # 檢查尖刺碰撞
+        total_spike_damage = 0
+        for spike in self.spike_hazards:
+            damage = spike.check_collision(player)
+            if damage > 0:
+                total_spike_damage += damage
+                # 給玩家一個短暫的無敵時間，避免連續受傷
+                break  # 只計算第一個碰撞的尖刺傷害
+
+        # 如果受到尖刺傷害，扣除玩家生命值
+        if total_spike_damage > 0:
+            player.take_damage(total_spike_damage)
+            print(f"🔺 踩到尖刺！受到 {total_spike_damage} 點傷害")
+
         # 檢查玩家是否收集到星星
         if self.check_star_collision(player):
             print("🌟 恭喜！您找到了目標星星！")
-            return {"star_collected": True}
+            return {
+                "star_collected": True,
+                "health_pickup_collected": health_pickup_collected,
+            }
 
-        return {"star_collected": False}
+        return {
+            "star_collected": False,
+            "health_pickup_collected": health_pickup_collected,
+        }
 
     def check_hazard_collisions(self, player):
         """
@@ -655,8 +753,16 @@ class LevelManager:
         for platform in self.platforms:
             platform.draw(screen, camera_x, camera_y)
 
-        # 繪製目標星星（如果還沒被收集）
-        if not self.star_collected:
+        # 繪製尖刺陷阱
+        for spike in self.spike_hazards:
+            spike.draw(screen, camera_x, camera_y)
+
+        # 繪製愛心道具
+        for pickup in self.health_pickups:
+            pickup.draw(screen, camera_x, camera_y)
+
+        # 繪製目標星星（只有在Boss被擊敗後才顯示）
+        if not self.star_collected and self.star_visible:
             self.draw_target_star(screen, camera_x, camera_y)
 
         # 繪製最右邊的破關星星（如果還沒被收集）

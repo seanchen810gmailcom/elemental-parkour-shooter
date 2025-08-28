@@ -60,6 +60,75 @@ class ElementalParkourShooter:
         # 初始化 pygame 系統
         pygame.init()
 
+        # 初始化音效系統
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        pygame.mixer.set_num_channels(SOUND_CHANNELS)  # 設定音效頻道數量
+
+        # 載入射擊音效
+        self.shooting_sound = None
+        try:
+            self.shooting_sound = pygame.mixer.Sound(SHOOTING_SOUND_PATH)
+            self.shooting_sound.set_volume(SHOOTING_SOUND_VOLUME)
+            print(f"成功載入射擊音效: {SHOOTING_SOUND_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"載入射擊音效失敗: {e}")
+            print("遊戲將在沒有音效的情況下運行")
+
+        # 載入必殺技音效
+        self.ultimate_sound = None
+        try:
+            self.ultimate_sound = pygame.mixer.Sound(ULTIMATE_SOUND_PATH)
+            self.ultimate_sound.set_volume(ULTIMATE_SOUND_VOLUME)
+            print(f"成功載入必殺技音效: {ULTIMATE_SOUND_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"載入必殺技音效失敗: {e}")
+            print("必殺技將在沒有音效的情況下運行")
+
+        # 載入狙擊怪來襲音樂
+        self.sniper_incoming_music = None
+        try:
+            self.sniper_incoming_music = pygame.mixer.Sound(SNIPER_INCOMING_MUSIC_PATH)
+            self.sniper_incoming_music.set_volume(SNIPER_INCOMING_MUSIC_VOLUME)
+            print(f"成功載入狙擊怪來襲音樂: {SNIPER_INCOMING_MUSIC_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"載入狙擊怪來襲音樂失敗: {e}")
+            print("狙擊怪將在沒有特殊音樂的情況下出現")
+
+        # 載入死亡音效
+        self.game_over_sound = None
+        try:
+            self.game_over_sound = pygame.mixer.Sound(GAME_OVER_SOUND_PATH)
+            self.game_over_sound.set_volume(GAME_OVER_SOUND_VOLUME)
+            print(f"成功載入死亡音效: {GAME_OVER_SOUND_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"載入死亡音效失敗: {e}")
+            print("遊戲將在沒有死亡音效的情況下運行")
+
+        # 載入勝利星星音效
+        self.victory_sound = None
+        try:
+            self.victory_sound = pygame.mixer.Sound(VICTORY_SOUND_PATH)
+            self.victory_sound.set_volume(VICTORY_SOUND_VOLUME)
+            print(f"成功載入勝利星星音效: {VICTORY_SOUND_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"載入勝利星星音效失敗: {e}")
+            print("勝利星星將在沒有音效的情況下顯示")
+
+        # 載入愛心道具音效
+        self.health_pickup_sound = None
+        try:
+            self.health_pickup_sound = pygame.mixer.Sound(HEALTH_PICKUP_SOUND_PATH)
+            self.health_pickup_sound.set_volume(HEALTH_PICKUP_SOUND_VOLUME)
+            print(f"成功載入愛心道具音效: {HEALTH_PICKUP_SOUND_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"載入愛心道具音效失敗: {e}")
+            print("愛心道具將在沒有音效的情況下顯示")
+
+        # 音樂播放狀態管理
+        self.is_sniper_music_playing = False
+        self.sniper_music_channel = None
+        self.sniper_music_channels = []  # 多重播放頻道列表
+
         # 建立遊戲視窗
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("跑酷射擊大冒險 - Elemental Parkour Shooter")
@@ -170,6 +239,7 @@ class ElementalParkourShooter:
                     "game_over", False
                 ):
                     # 玩家死亡且沒有剩餘生命次數，進入遊戲結束狀態
+                    self.play_game_over_sound()  # 播放死亡音效
                     self.game_state = "game_over"
                     self.game_over_time = time.time()
                     print("💀 遊戲結束！")
@@ -182,6 +252,14 @@ class ElementalParkourShooter:
                 bullet_info = self.player.get_pending_bullet()
                 if bullet_info:
                     self.weapon_manager.create_bullet(bullet_info)
+                    # 播放射擊音效，根據子彈傷害調整音量
+                    if isinstance(bullet_info, list):
+                        # 散彈槍會返回多顆子彈的列表，取第一顆的傷害值
+                        damage = bullet_info[0]["damage"]
+                    else:
+                        # 其他武器返回單一子彈資訊
+                        damage = bullet_info["damage"]
+                    self.play_shooting_sound(damage)
 
                 # 處理玩家的必殺技 - 檢查是否有待發射的必殺技
                 ultimate_info = self.player.get_pending_ultimate()
@@ -194,6 +272,9 @@ class ElementalParkourShooter:
 
                     # 創建必殺技，傳入目標資訊讓子彈智能分配攻擊
                     self.weapon_manager.create_ultimate(ultimate_info, all_targets)
+
+                    # 播放必殺技專用雷電音效（大聲震撼）
+                    self.play_ultimate_sound()
 
                     # 根據敵人數量顯示不同的攻擊模式訊息
                     if len(all_targets) == 0:
@@ -222,11 +303,16 @@ class ElementalParkourShooter:
             elif self.player.is_dead:
                 # 玩家死亡但還有生命次數，進入死亡畫面
                 if self.player.lives > 0:
+                    # 只在剛進入死亡狀態時播放音效，避免重複播放
+                    if self.game_state != "death_screen":
+                        self.play_game_over_sound()  # 播放死亡音效
                     self.game_state = "death_screen"
                     self.game_over_time = time.time()
-                    print(f"� 玩家死亡！剩餘生命次數: {self.player.lives}")
+                    print(f"💀 玩家死亡！剩餘生命次數: {self.player.lives}")
                 else:
                     # 沒有剩餘生命次數，遊戲結束
+                    if self.game_state != "game_over":
+                        self.play_game_over_sound()  # 播放死亡音效
                     self.game_state = "game_over"
                     self.game_over_time = time.time()
                     print("💀 遊戲結束！沒有剩餘生命次數")
@@ -237,8 +323,15 @@ class ElementalParkourShooter:
 
             # 檢查是否收集到星星
             if level_update_result.get("star_collected", False):
+                # 玩家成功收集到星星！播放勝利音效
+                self.play_victory_sound()
                 self.game_state = "victory"
                 self.score += 10000  # 收集星星的大獎勵
+
+            # 檢查是否拾取到愛心道具
+            if level_update_result.get("health_pickup_collected", False):
+                # 玩家成功拾取愛心道具！播放拾取音效
+                self.play_health_pickup_sound()
 
             # 更新攝影機
             self.update_camera()
@@ -263,8 +356,15 @@ class ElementalParkourShooter:
             if monster_update_result["boss_spawned"]:
                 print("🔥 強大的Boss出現了！")
 
+            # 管理狙擊怪來襲音樂
+            self.manage_sniper_incoming_music()
+
             # 檢查Boss是否被擊敗
             if monster_update_result["boss_defeated"]:
+                # 停止狙擊怪來襲音樂（如果在播放）
+                if self.is_sniper_music_playing:
+                    self.stop_sniper_incoming_music()
+
                 # 只有狙擊Boss被擊敗時才生成勝利星星
                 if monster_update_result.get("sniper_boss_defeated", False):
                     boss_x = monster_update_result.get(
@@ -276,6 +376,7 @@ class ElementalParkourShooter:
                     self.level_manager.star_x = boss_x
                     self.level_manager.star_y = boss_y - 50
                     self.level_manager.star_collected = False
+                    self.level_manager.star_visible = True  # 讓勝利星星可見
                     print("🌟 最終Boss被擊敗！勝利星星出現了！")
                 else:
                     print("🔥 第一階段Boss被擊敗，準備最終挑戰！")
@@ -330,10 +431,253 @@ class ElementalParkourShooter:
             # 這個狀態不需要更新遊戲邏輯，只是等待玩家輸入
             pass
 
+    def play_shooting_sound(self, damage=30):
+        """
+        播放射擊音效 - 根據子彈強度調整音量\n
+        \n
+        特點：\n
+        1. 根據子彈傷害值動態調整音量大小\n
+        2. 傷害越高，音效越響亮，差距明顯\n
+        3. 支援多頻道播放，適合連續射擊\n
+        4. 音效載入失敗時不影響遊戲運行\n
+        \n
+        參數:\n
+        damage (int): 子彈傷害值，範圍 20-90\n
+        \n
+        音量計算（差距加大）：\n
+        - 傷害 20（冰彈）→ 音量 0.1（很小聲）\n
+        - 傷害 35（火彈/衝鋒槍）→ 音量 0.4\n
+        - 傷害 90（狙擊槍）→ 音量 1.0（最大聲）\n
+        """
+        if self.shooting_sound:
+            try:
+                # 根據傷害值計算音量（線性映射，範圍更大）
+                # 傷害範圍：20-90，音量範圍：0.1-1.0（差距9倍）
+                min_damage = 20
+                max_damage = 90
+                min_volume = 0.1  # 從 0.3 降低到 0.1，讓小威力子彈很小聲
+                max_volume = 1.0  # 維持最大音量
+
+                # 限制傷害值在有效範圍內
+                damage = max(min_damage, min(max_damage, damage))
+
+                # 線性插值計算音量
+                volume_ratio = (damage - min_damage) / (max_damage - min_damage)
+                volume = min_volume + (max_volume - min_volume) * volume_ratio
+
+                # 設定音效音量並播放
+                self.shooting_sound.set_volume(volume)
+                self.shooting_sound.play()
+
+                # 除錯資訊：顯示當前音量（可啟用來觀察效果）
+                print(f"🔊 射擊音效：傷害 {damage} → 音量 {volume:.2f}")
+
+            except pygame.error as e:
+                # 音效播放失敗時不影響遊戲
+                print(f"播放射擊音效失敗: {e}")
+
+    def play_ultimate_sound(self):
+        """
+        播放必殺技音效 - 雷電轟鳴聲（超大音量版本）\n
+        \n
+        特點：\n
+        1. 使用專門的雷電音效，震撼感十足\n
+        2. 音量設定為4倍大聲，突出必殺技的威力\n
+        3. 使用多頻道同時播放技術增強音量感\n
+        4. 音效載入失敗時不影響遊戲運行\n
+        \n
+        音效特性：\n
+        - 使用 heavy-thunder-sound-effect 雷電音效\n
+        - 音量強化到4倍大聲\n
+        - 適合20秒冷卻的強力技能\n
+        """
+        if self.ultimate_sound:
+            try:
+                # 設定超大音量（pygame會自動限制在1.0，但我們盡力而為）
+                max_volume = min(1.0, ULTIMATE_SOUND_VOLUME)  # 確保不超過1.0
+                self.ultimate_sound.set_volume(max_volume)
+
+                # 多重播放技術：同時在多個頻道播放相同音效來增強音量感
+                # 這會讓音效聽起來更響亮更震撼
+                for i in range(3):  # 同時播放3次
+                    channel = pygame.mixer.find_channel()
+                    if channel:
+                        channel.play(self.ultimate_sound)
+                    else:
+                        # 如果沒有可用頻道，直接播放
+                        self.ultimate_sound.play()
+
+                # 除錯資訊：顯示必殺技音效觸發
+                print(
+                    f"⚡⚡⚡ 必殺技音效：超大聲雷電轟鳴！音量 {ULTIMATE_SOUND_VOLUME}倍（實際{max_volume}）"
+                )
+
+            except pygame.error as e:
+                # 音效播放失敗時不影響遊戲
+                print(f"播放必殺技音效失敗: {e}")
+
+    def play_game_over_sound(self):
+        """
+        播放玩家死亡音效 - Game Over 音效\n
+        \n
+        特點：\n
+        1. 音量適中，不會過於突兀但足夠引起注意\n
+        2. 只在玩家真正死亡時播放，避免重複播放\n
+        3. 音效載入失敗時不影響遊戲運行\n
+        \n
+        使用時機：\n
+        - 玩家血量歸零死亡時\n
+        - 玩家掉出螢幕死亡時\n
+        - 受到致命傷害時\n
+        """
+        if self.game_over_sound:
+            try:
+                # 播放死亡音效
+                self.game_over_sound.play()
+                print(f"💀 播放死亡音效：Game Over！")
+
+            except pygame.error as e:
+                # 音效播放失敗時不影響遊戲
+                print(f"播放死亡音效失敗: {e}")
+
+    def play_victory_sound(self):
+        """
+        播放勝利星星音效 - 成功收集星星時的慶祝音效\n
+        \n
+        特點：\n
+        1. 使用愉快的勝利音效，讓玩家感受成就感\n
+        2. 音量適中，不會蓋過其他遊戲音效\n
+        3. 在玩家成功收集到勝利星星時播放\n
+        4. 音效載入失敗時不影響遊戲運行\n
+        \n
+        使用時機：\n
+        - 玩家收集到 Boss 勝利星星時\n
+        - 玩家收集到最右邊破關星星時\n
+        - 完成重要成就時\n
+        """
+        if self.victory_sound:
+            try:
+                # 播放勝利音效
+                self.victory_sound.play()
+                print(f"🌟 播放勝利星星音效：Stage Clear！")
+
+            except pygame.error as e:
+                # 音效播放失敗時不影響遊戲
+                print(f"播放勝利星星音效失敗: {e}")
+
+    def play_health_pickup_sound(self):
+        """
+        播放愛心道具音效 - 撿到愛心時的溫馨音效\n
+        \n
+        特點：\n
+        1. 使用溫馨的道具拾取音效，給玩家正面回饋\n
+        2. 音量適中，不會打斷遊戲節奏\n
+        3. 在玩家拾取愛心道具並成功恢復生命值時播放\n
+        4. 音效載入失敗時不影響遊戲運行\n
+        \n
+        使用時機：\n
+        - 玩家碰到愛心道具並成功恢復生命值時\n
+        - 拾取其他有益道具時（未來擴展）\n
+        """
+        if self.health_pickup_sound:
+            try:
+                # 播放愛心道具音效
+                self.health_pickup_sound.play()
+                print(f"💚 播放愛心道具音效：吃到寶物！")
+
+            except pygame.error as e:
+                # 音效播放失敗時不影響遊戲
+                print(f"播放愛心道具音效失敗: {e}")
+
+    def manage_sniper_incoming_music(self):
+        """
+        管理狙擊怪來襲音樂播放\n
+        \n
+        根據狙擊Boss的存在狀態決定是否播放特殊音樂\n
+        """
+        # 檢查是否有狙擊Boss存在
+        has_sniper_boss = self.monster_manager.boss is not None and hasattr(
+            self.monster_manager.boss, "tracking_bullets"
+        )
+
+        if has_sniper_boss and not self.is_sniper_music_playing:
+            # 狙擊Boss存在但音樂還沒播放，開始播放
+            self.play_sniper_incoming_music()
+        elif not has_sniper_boss and self.is_sniper_music_playing:
+            # 狙擊Boss不存在但音樂還在播放，停止播放
+            self.stop_sniper_incoming_music()
+
+    def play_sniper_incoming_music(self):
+        """
+        播放狙擊怪來襲音樂 - 超大音量版本\n
+        \n
+        使用多重播放技術增強音量感，達到3倍大聲的效果\n
+        """
+        if self.sniper_incoming_music and not self.is_sniper_music_playing:
+            try:
+                # 設定最大音量（pygame會自動限制在1.0，但我們盡力而為）
+                max_volume = min(1.0, SNIPER_INCOMING_MUSIC_VOLUME)
+                self.sniper_incoming_music.set_volume(max_volume)
+
+                # 多重播放技術：同時在多個頻道播放相同音樂來增強音量感
+                # 這會讓音樂聽起來更響亮更震撼
+                self.sniper_music_channels = []  # 儲存多個音樂頻道
+
+                for i in range(3):  # 同時播放3次來達到3倍音量效果
+                    channel = pygame.mixer.find_channel()
+                    if channel:
+                        channel.play(self.sniper_incoming_music, loops=-1)
+                        self.sniper_music_channels.append(channel)
+                    else:
+                        # 如果沒有可用頻道，直接播放
+                        self.sniper_incoming_music.play(loops=-1)
+
+                self.is_sniper_music_playing = True
+                print(
+                    f"🎯🎯🎯 狙擊怪來襲音樂開始播放！音量 {SNIPER_INCOMING_MUSIC_VOLUME}倍（3倍大聲）"
+                )
+
+            except pygame.error as e:
+                print(f"播放狙擊怪來襲音樂失敗: {e}")
+
+    def stop_sniper_incoming_music(self):
+        """
+        停止狙擊怪來襲音樂 - 停止所有多重播放頻道\n
+        """
+        if self.is_sniper_music_playing:
+            try:
+                # 停止所有音樂頻道
+                if (
+                    hasattr(self, "sniper_music_channels")
+                    and self.sniper_music_channels
+                ):
+                    for channel in self.sniper_music_channels:
+                        if channel:
+                            channel.stop()
+                    self.sniper_music_channels = []
+                elif (
+                    hasattr(self, "sniper_music_channel") and self.sniper_music_channel
+                ):
+                    self.sniper_music_channel.stop()
+                else:
+                    # 停止所有正在播放的音樂（如果沒有專用頻道）
+                    pygame.mixer.stop()
+
+                self.is_sniper_music_playing = False
+                self.sniper_music_channel = None
+                print("🎯 狙擊怪來襲音樂已停止（3倍音量版本）")
+
+            except pygame.error as e:
+                print(f"停止狙擊怪來襲音樂失敗: {e}")
+
     def reset_game(self):
         """
         重置遊戲到初始狀態\n
         """
+        # 停止狙擊怪來襲音樂（如果正在播放）
+        if self.is_sniper_music_playing:
+            self.stop_sniper_incoming_music()
+
         # 重置遊戲狀態
         self.game_state = "playing"
         self.star_collected = False

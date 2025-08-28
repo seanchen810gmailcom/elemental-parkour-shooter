@@ -99,7 +99,7 @@ class Player(GameObject):
             },
             "sniper": {
                 "name": "狙擊槍",
-                "fire_rate": 1.5,  # 發射率低
+                "fire_rate": 1,  # 發射率低
                 "damage": 90,  # 攻擊力降低10%（100->90）
                 "bullet_speed": 35,
                 "spread": 0,
@@ -122,6 +122,10 @@ class Player(GameObject):
 
         # 射擊請求佇列
         self.pending_bullet = None
+
+        # 狙擊槍準心圖片載入
+        self.crosshair_image = None
+        self.load_crosshair_image()
 
         # 必殺技系統
         self.last_ultimate_time = 0  # 上次使用必殺技的時間
@@ -419,8 +423,8 @@ class Player(GameObject):
         # 更新狀態效果
         self.update_status_effects()
 
-        # 自動回血
-        self.auto_heal()
+        # 自動回血 (已關閉)
+        # self.auto_heal()
 
         # 計算移動速度修正（受狀態效果影響）
         speed_modifier = self.get_speed_modifier()
@@ -770,14 +774,49 @@ class Player(GameObject):
 
         # 移除滑牆白色邊框特效，保持簡潔外觀
 
+    def load_crosshair_image(self):
+        """
+        載入狙擊槍準心圖片 - 處理圖片載入和縮放\n
+        \n
+        功能:\n
+        1. 嘗試載入指定的準心圖片檔案\n
+        2. 將圖片縮放到適當大小\n
+        3. 如果載入失敗，使用預設的十字準心\n
+        \n
+        圖片處理:\n
+        - 支援 PNG 格式的透明背景圖片\n
+        - 自動縮放到 CROSSHAIR_SIZE 尺寸\n
+        - 保持圖片原始比例並居中\n
+        """
+        try:
+            # 載入準心圖片
+            self.crosshair_image = pygame.image.load(
+                CROSSHAIR_IMAGE_PATH
+            ).convert_alpha()
+            # 縮放到指定大小，保持比例
+            self.crosshair_image = pygame.transform.scale(
+                self.crosshair_image, (CROSSHAIR_SIZE, CROSSHAIR_SIZE)
+            )
+            print(f"成功載入狙擊槍準心圖片: {CROSSHAIR_IMAGE_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            # 圖片載入失敗，將使用預設十字準心
+            print(f"準心圖片載入失敗: {e}")
+            self.crosshair_image = None
+
     def draw_crosshair(self, screen, camera_x=0, camera_y=0):
         """
-        繪製狙擊槍準心 - 顯示玩家準心位置\n
+        繪製狙擊槍準心 - 使用自訂圖片或預設十字準心\n
         \n
         參數:\n
         screen (pygame.Surface): 要繪製到的螢幕表面\n
         camera_x (int): 攝影機 x 偏移\n
         camera_y (int): 攝影機 y 偏移\n
+        \n
+        繪製邏輯:\n
+        1. 只在使用狙擊槍時顯示準心\n
+        2. 優先使用載入的圖片準心\n
+        3. 圖片載入失敗時使用預設十字準心\n
+        4. 準心位置跟隨滑鼠游標\n
         """
         if self.current_weapon != "sniper":
             return
@@ -785,30 +824,39 @@ class Player(GameObject):
         # 獲取滑鼠位置
         mouse_x, mouse_y = pygame.mouse.get_pos()
 
-        # 繪製準心
-        crosshair_size = 20
-        crosshair_color = (255, 0, 0)  # 紅色準心
+        if self.crosshair_image is not None:
+            # 使用圖片準心
+            # 計算圖片繪製位置，讓圖片中心對齊滑鼠位置
+            image_rect = self.crosshair_image.get_rect()
+            image_rect.center = (mouse_x, mouse_y)
 
-        # 水平線
-        pygame.draw.line(
-            screen,
-            crosshair_color,
-            (mouse_x - crosshair_size, mouse_y),
-            (mouse_x + crosshair_size, mouse_y),
-            2,
-        )
+            # 繪製準心圖片
+            screen.blit(self.crosshair_image, image_rect)
+        else:
+            # 圖片載入失敗，使用預設十字準心
+            crosshair_size = 20
+            crosshair_color = CROSSHAIR_COLOR
 
-        # 垂直線
-        pygame.draw.line(
-            screen,
-            crosshair_color,
-            (mouse_x, mouse_y - crosshair_size),
-            (mouse_x, mouse_y + crosshair_size),
-            2,
-        )
+            # 水平線
+            pygame.draw.line(
+                screen,
+                crosshair_color,
+                (mouse_x - crosshair_size, mouse_y),
+                (mouse_x + crosshair_size, mouse_y),
+                2,
+            )
 
-        # 中心點
-        pygame.draw.circle(screen, crosshair_color, (mouse_x, mouse_y), 3, 1)
+            # 垂直線
+            pygame.draw.line(
+                screen,
+                crosshair_color,
+                (mouse_x, mouse_y - crosshair_size),
+                (mouse_x, mouse_y + crosshair_size),
+                2,
+            )
+
+            # 中心點
+            pygame.draw.circle(screen, crosshair_color, (mouse_x, mouse_y), 3, 1)
 
     def draw_health_bar(self, screen):
         """

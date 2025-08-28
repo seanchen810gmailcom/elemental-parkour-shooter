@@ -239,6 +239,39 @@ MINIMAP_WATER_MONSTER_COLOR = (0, 150, 255)  # 藍色水怪
 MINIMAP_TORNADO_MONSTER_COLOR = (200, 200, 255)  # 淺藍色龍捲風怪
 MINIMAP_DEFAULT_MONSTER_COLOR = (255, 0, 0)  # 預設紅色
 
+######################狙擊槍準心設定######################
+
+# 狙擊槍準心圖片設定
+CROSSHAIR_IMAGE_PATH = (
+    "—Pngtree—crosshair simple split sight graphics_6809012.png"  # 準心圖片路徑
+)
+CROSSHAIR_SIZE = 50  # 準心圖片大小（像素）- 適合狙擊槍使用的尺寸
+CROSSHAIR_COLOR = (255, 0, 0)  # 備用準心顏色（當圖片載入失敗時使用）
+
+######################音效設定######################
+
+# 音效檔案路徑
+SHOOTING_SOUND_PATH = "attack-laser-128280 (mp3cut.net).mp3"
+ULTIMATE_SOUND_PATH = (
+    "heavy-thunder-sound-effect-no-copyright-338980.mp3"  # 必殺技雷電音效
+)
+SNIPER_INCOMING_MUSIC_PATH = "sniper_incoming.mp3"  # 狙擊怪來襲背景音樂
+GAME_OVER_SOUND_PATH = "Game Over.wav"  # 玩家死亡音效
+VICTORY_SOUND_PATH = "Stage Win (Super Mario) - QuickSounds.com.mp3"  # 勝利星星音效
+HEALTH_PICKUP_SOUND_PATH = "吃到寶物.wav"  # 愛心道具音效
+
+# 音效音量設定（0.0 - 1.0）
+SHOOTING_SOUND_VOLUME = 0.2  # 射擊音效音量，降低讓必殺技更突出
+ULTIMATE_SOUND_VOLUME = 4.0  # 必殺技音效音量，設定為4倍（pygame會限制在1.0但表達意圖）
+SNIPER_INCOMING_MUSIC_VOLUME = 2.1  # 狙擊怪來襲音樂音量（3倍大聲）
+GAME_OVER_SOUND_VOLUME = 0.8  # 死亡音效音量，較大聲但不過於震撼
+VICTORY_SOUND_VOLUME = 0.9  # 勝利星星音效音量
+HEALTH_PICKUP_SOUND_VOLUME = 0.6  # 愛心道具音效音量
+MASTER_VOLUME = 0.9  # 主音量
+
+# 音效播放設定
+SOUND_CHANNELS = 8  # 同時播放的音效頻道數量，支援機關槍連續射擊
+
 ######################字體設定######################
 
 import pygame

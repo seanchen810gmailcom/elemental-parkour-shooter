@@ -152,3 +152,226 @@ class StatusEffect:
             return 0.0
 
         return 1.0  # 預設不影響速度
+
+
+######################愛心道具類別######################
+
+
+class HealthPickup(GameObject):
+    """
+    愛心道具類別 - 玩家可以拾取來恢復生命值\n
+    \n
+    提供生命值恢復功能：\n
+    1. 玩家碰到後恢復生命值\n
+    2. 閃爍動畫效果\n
+    3. 拾取後消失\n
+    \n
+    參數:\n
+    x (float): 愛心的 X 座標\n
+    y (float): 愛心的 Y 座標\n
+    heal_amount (int): 恢復的生命值，默認 10\n
+    """
+
+    def __init__(self, x, y, heal_amount=10):
+        super().__init__(x, y, 20, 20, (255, 105, 180))  # 粉紅色愛心
+        self.heal_amount = heal_amount
+        self.collected = False
+        self.animation_timer = 0
+        self.pulse_scale = 1.0
+
+    def update(self, dt):
+        """
+        更新愛心動畫效果
+
+        參數:
+        dt (float): 時間間隔
+        """
+        self.animation_timer += dt
+        # 創建脈衝效果
+        self.pulse_scale = 1.0 + 0.2 * math.sin(self.animation_timer * 4)
+
+    def check_collision(self, player):
+        """
+        檢查玩家是否拾取了愛心
+
+        參數:
+        player (Player): 玩家物件
+
+        回傳:
+        bool: 是否被拾取
+        """
+        if self.collected:
+            return False
+
+        player_rect = pygame.Rect(player.x, player.y, player.width, player.height)
+        heart_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+
+        if player_rect.colliderect(heart_rect):
+            # 恢復玩家生命值
+            if player.health < player.max_health:
+                old_health = player.health
+                player.heal(self.heal_amount)
+                print(f"💚 撿到愛心！生命值：{old_health} → {player.health}")
+                self.collected = True
+                return True
+
+        return False
+
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製愛心道具
+
+        參數:
+        screen (pygame.Surface): 要繪製到的螢幕表面
+        camera_x (int): 攝影機 x 偏移
+        camera_y (int): 攝影機 y 偏移
+        """
+        if self.collected:
+            return
+
+        # 計算螢幕位置
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # 只在螢幕範圍內繪製
+        if (
+            -50 <= screen_x <= SCREEN_WIDTH + 50
+            and -50 <= screen_y <= SCREEN_HEIGHT + 50
+        ):
+
+            # 計算縮放後的尺寸
+            scaled_size = int(self.width * self.pulse_scale)
+            center_x = int(screen_x + self.width // 2)
+            center_y = int(screen_y + self.height // 2)
+
+            # 繪製愛心形狀
+            self.draw_heart(screen, center_x, center_y, scaled_size)
+
+    def draw_heart(self, screen, center_x, center_y, size):
+        """
+        繪製愛心形狀
+
+        參數:
+        screen (pygame.Surface): 螢幕表面
+        center_x (int): 中心 X 座標
+        center_y (int): 中心 Y 座標
+        size (int): 愛心大小
+        """
+        # 愛心顏色（亮粉紅色）
+        heart_color = (255, 105, 180)
+
+        # 繪製愛心的兩個圓
+        radius = size // 4
+        # 左上圓
+        pygame.draw.circle(
+            screen,
+            heart_color,
+            (center_x - radius // 2, center_y - radius // 2),
+            radius,
+        )
+        # 右上圓
+        pygame.draw.circle(
+            screen,
+            heart_color,
+            (center_x + radius // 2, center_y - radius // 2),
+            radius,
+        )
+
+        # 繪製愛心的下方三角形
+        triangle_points = [
+            (center_x - size // 2, center_y),
+            (center_x + size // 2, center_y),
+            (center_x, center_y + size // 2),
+        ]
+        pygame.draw.polygon(screen, heart_color, triangle_points)
+
+
+######################尖刺陷阱類別######################
+
+
+class SpikeHazard(GameObject):
+    """
+    尖刺陷阱類別 - 對玩家造成傷害的危險區域\n
+    \n
+    提供陷阱功能：\n
+    1. 玩家碰到會受到傷害\n
+    2. 尖銳的視覺效果\n
+    3. 可設定傷害量\n
+    \n
+    參數:\n
+    x (float): 尖刺的 X 座標\n
+    y (float): 尖刺的 Y 座標\n
+    width (int): 尖刺寬度\n
+    height (int): 尖刺高度\n
+    damage (int): 造成的傷害值，默認 15\n
+    """
+
+    def __init__(self, x, y, width=40, height=30, damage=15):
+        super().__init__(x, y, width, height, (128, 128, 128))  # 灰色基底
+        self.damage = damage
+        self.spike_color = (64, 64, 64)  # 深灰色尖刺
+        self.blood_color = (139, 0, 0)  # 暗紅色血跡
+
+    def check_collision(self, player):
+        """
+        檢查玩家是否碰到尖刺
+
+        參數:
+        player (Player): 玩家物件
+
+        回傳:
+        int: 造成的傷害值，0 表示沒有碰撞
+        """
+        player_rect = pygame.Rect(player.x, player.y, player.width, player.height)
+        spike_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+
+        if player_rect.colliderect(spike_rect):
+            return self.damage
+
+        return 0
+
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製尖刺陷阱
+
+        參數:
+        screen (pygame.Surface): 要繪製到的螢幕表面
+        camera_x (int): 攝影機 x 偏移
+        camera_y (int): 攝影機 y 偏移
+        """
+        # 計算螢幕位置
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # 只在螢幕範圍內繪製
+        if (
+            -50 <= screen_x <= SCREEN_WIDTH + 50
+            and -50 <= screen_y <= SCREEN_HEIGHT + 50
+        ):
+
+            # 繪製尖刺基座
+            base_rect = pygame.Rect(
+                screen_x, screen_y + self.height - 10, self.width, 10
+            )
+            pygame.draw.rect(screen, self.color, base_rect)
+
+            # 繪製多個尖刺
+            spike_count = max(2, self.width // 15)  # 根據寬度決定尖刺數量
+            spike_width = self.width // spike_count
+
+            for i in range(spike_count):
+                spike_x = screen_x + i * spike_width
+                spike_points = [
+                    (spike_x, screen_y + self.height - 10),  # 左下
+                    (spike_x + spike_width, screen_y + self.height - 10),  # 右下
+                    (spike_x + spike_width // 2, screen_y),  # 頂點
+                ]
+                pygame.draw.polygon(screen, self.spike_color, spike_points)
+
+                # 在尖刺頂端添加血跡效果
+                blood_points = [
+                    (spike_x + spike_width // 2 - 2, screen_y + 2),
+                    (spike_x + spike_width // 2 + 2, screen_y + 2),
+                    (spike_x + spike_width // 2, screen_y),
+                ]
+                pygame.draw.polygon(screen, self.blood_color, blood_points)
