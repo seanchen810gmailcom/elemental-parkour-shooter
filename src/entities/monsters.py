@@ -755,7 +755,19 @@ class LavaMonster(Monster):
             if self.direction < 0:
                 image_to_draw = pygame.transform.flip(image_to_draw, True, False)
 
-            screen.blit(image_to_draw, (screen_x, screen_y))
+            # 檢查是否為Boss（根據當前尺寸判斷）
+            is_boss = (
+                self.width > LAVA_MONSTER_WIDTH or self.height > LAVA_MONSTER_HEIGHT
+            )
+            
+            # 如果是Boss，確保圖片底部對齊Boss的碰撞體積底部
+            if is_boss:
+                # 計算Boss圖片繪製位置，確保圖片底部與碰撞體積底部對齊
+                boss_image_y = screen_y + self.height - image_to_draw.get_height()
+                screen.blit(image_to_draw, (screen_x, boss_image_y))
+            else:
+                # 普通岩漿怪直接在位置上繪製
+                screen.blit(image_to_draw, (screen_x, screen_y))
         else:
             # 圖片載入失敗，使用矩形繪製
             monster_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
