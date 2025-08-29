@@ -507,6 +507,47 @@ class LavaMonster(Monster):
         self.last_lava_ball_time = 0
         self.lava_balls = []  # 噴射的熔岩球列表
 
+        # 載入怪物圖片
+        self.image = self.load_monster_image()
+
+    def load_monster_image(self):
+        """
+        載入岩漿怪圖片\n
+        \n
+        回傳:\n
+        pygame.Surface or None: 圖片表面，載入失敗則返回 None\n
+        """
+        try:
+            # 檢查是否為Boss（根據當前尺寸判斷）
+            is_boss = (
+                self.width > LAVA_MONSTER_WIDTH or self.height > LAVA_MONSTER_HEIGHT
+            )
+
+            if is_boss:
+                # Boss使用專用的岩漿Boss圖片
+                image = pygame.image.load(LAVA_BOSS_IMAGE_PATH).convert_alpha()
+                image = pygame.transform.scale(image, LAVA_BOSS_IMAGE_SIZE)
+                print(f"✅ 成功載入岩漿Boss圖片: {LAVA_BOSS_IMAGE_PATH}")
+            else:
+                # 普通岩漿怪使用小火怪圖片
+                image = pygame.image.load(LAVA_MONSTER_IMAGE_PATH).convert_alpha()
+                image = pygame.transform.scale(image, LAVA_MONSTER_IMAGE_SIZE)
+                print(f"✅ 成功載入岩漿怪圖片: {LAVA_MONSTER_IMAGE_PATH}")
+
+            return image
+        except (pygame.error, FileNotFoundError) as e:
+            # 圖片載入失敗，使用預設顏色繪製
+            print(f"⚠️ 載入岩漿怪圖片失敗: {e}")
+            print("🎨 將使用預設顏色矩形繪製")
+            return None
+
+    def reload_image_if_boss(self):
+        """
+        當怪物成為Boss時重新載入適當大小的圖片\n
+        這個方法會在Monster被設定為Boss後呼叫\n
+        """
+        self.image = self.load_monster_image()
+
     def create_lava_ball(self, target_x, target_y):
         """
         建立熔岩球攻擊\n
@@ -672,7 +713,91 @@ class LavaMonster(Monster):
         camera_x (int): 攝影機 x 偏移\n
         camera_y (int): 攝影機 y 偏移\n
         """
-        super().draw(screen, camera_x, camera_y)
+        if not self.is_alive:
+            return
+
+        # 計算螢幕位置
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # 根據狀態效果決定繪製方式
+        current_color = self.color
+        for effect in self.status_effects:
+            if effect.effect_type == "slow":
+                # 減速狀態：顏色變暗
+                current_color = tuple(max(0, c - 50) for c in self.color)
+                break
+            elif effect.effect_type == "paralysis":
+                # 麻痺狀態：變成灰色
+                current_color = GRAY
+                break
+
+        # 繪製岩漿怪本體
+        if self.image is not None:
+            # 使用圖片繪製
+            image_to_draw = self.image
+
+            # 如果有狀態效果，需要調整圖片顏色（簡化處理：在圖片上疊加半透明色塊）
+            if current_color != self.color:
+                # 建立顏色覆蓋層
+                color_overlay = pygame.Surface(
+                    (self.width, self.height), pygame.SRCALPHA
+                )
+                color_overlay.fill((*current_color, 100))  # 半透明覆蓋
+
+                # 複製原圖並疊加顏色
+                image_to_draw = self.image.copy()
+                image_to_draw.blit(
+                    color_overlay, (0, 0), special_flags=pygame.BLEND_ALPHA_SDL2
+                )
+
+            # 根據方向翻轉圖片
+            if self.direction < 0:
+                image_to_draw = pygame.transform.flip(image_to_draw, True, False)
+
+            screen.blit(image_to_draw, (screen_x, screen_y))
+        else:
+            # 圖片載入失敗，使用矩形繪製
+            monster_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
+            pygame.draw.rect(screen, current_color, monster_rect)
+
+        # 繪製生命值條（在怪物上方）
+        if self.health < self.max_health:
+            bar_width = self.width
+            bar_height = 6
+            bar_x = screen_x
+            bar_y = screen_y - bar_height - 5
+
+            # 背景（紅色）
+            bg_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+            pygame.draw.rect(screen, RED, bg_rect)
+
+            # 當前生命值（綠色）
+            health_ratio = self.health / self.max_health
+            health_width = int(bar_width * health_ratio)
+            health_rect = pygame.Rect(bar_x, bar_y, health_width, bar_height)
+            pygame.draw.rect(screen, GREEN, health_rect)
+
+        # 繪製方向指示（小箭頭）
+        center_x = screen_x + self.width // 2
+        center_y = screen_y + self.height // 2
+
+        if self.direction > 0:
+            # 面向右邊的箭頭
+            arrow_points = [
+                (center_x + 5, center_y),
+                (center_x + 10, center_y - 3),
+                (center_x + 10, center_y + 3),
+            ]
+        else:
+            # 面向左邊的箭頭
+            arrow_points = [
+                (center_x - 5, center_y),
+                (center_x - 10, center_y - 3),
+                (center_x - 10, center_y + 3),
+            ]
+
+        pygame.draw.polygon(screen, WHITE, arrow_points)
 
         # 繪製熔岩球（考慮攝影機偏移）
         for ball in self.lava_balls:
@@ -728,6 +853,29 @@ class WaterMonster(Monster):
         self.water_bullets = []  # 水彈列表
         self.dash_cooldown = 4.0  # 衝刺冷卻時間
         self.last_dash_time = 0
+
+        # 載入怪物圖片
+        self.image = self.load_monster_image()
+
+    def load_monster_image(self):
+        """
+        載入水怪圖片\n
+        \n
+        回傳:\n
+        pygame.Surface or None: 圖片表面，載入失敗則返回 None\n
+        """
+        try:
+            # 載入圖片檔案
+            image = pygame.image.load(WATER_MONSTER_IMAGE_PATH).convert_alpha()
+            # 縮放到指定大小
+            image = pygame.transform.scale(image, WATER_MONSTER_IMAGE_SIZE)
+            print(f"✅ 成功載入水怪圖片: {WATER_MONSTER_IMAGE_PATH}")
+            return image
+        except (pygame.error, FileNotFoundError) as e:
+            # 圖片載入失敗，使用預設顏色繪製
+            print(f"⚠️ 載入水怪圖片失敗: {e}")
+            print("🎨 將使用預設顏色矩形繪製")
+            return None
 
     def create_water_splash(self, player):
         """
@@ -910,7 +1058,91 @@ class WaterMonster(Monster):
         camera_y (int): 攝影機 y 偏移\n
         camera_y (int): 攝影機 y 偏移\n
         """
-        super().draw(screen, camera_x, camera_y)
+        if not self.is_alive:
+            return
+
+        # 計算螢幕位置
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # 根據狀態效果決定繪製方式
+        current_color = self.color
+        for effect in self.status_effects:
+            if effect.effect_type == "slow":
+                # 減速狀態：顏色變暗
+                current_color = tuple(max(0, c - 50) for c in self.color)
+                break
+            elif effect.effect_type == "paralysis":
+                # 麻痺狀態：變成灰色
+                current_color = GRAY
+                break
+
+        # 繪製水怪本體
+        if self.image is not None:
+            # 使用圖片繪製
+            image_to_draw = self.image
+
+            # 如果有狀態效果，需要調整圖片顏色（簡化處理：在圖片上疊加半透明色塊）
+            if current_color != self.color:
+                # 建立顏色覆蓋層
+                color_overlay = pygame.Surface(
+                    (self.width, self.height), pygame.SRCALPHA
+                )
+                color_overlay.fill((*current_color, 100))  # 半透明覆蓋
+
+                # 複製原圖並疊加顏色
+                image_to_draw = self.image.copy()
+                image_to_draw.blit(
+                    color_overlay, (0, 0), special_flags=pygame.BLEND_ALPHA_SDL2
+                )
+
+            # 根據方向翻轉圖片
+            if self.direction < 0:
+                image_to_draw = pygame.transform.flip(image_to_draw, True, False)
+
+            screen.blit(image_to_draw, (screen_x, screen_y))
+        else:
+            # 圖片載入失敗，使用矩形繪製
+            monster_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
+            pygame.draw.rect(screen, current_color, monster_rect)
+
+        # 繪製生命值條（在怪物上方）
+        if self.health < self.max_health:
+            bar_width = self.width
+            bar_height = 6
+            bar_x = screen_x
+            bar_y = screen_y - bar_height - 5
+
+            # 背景（紅色）
+            bg_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+            pygame.draw.rect(screen, RED, bg_rect)
+
+            # 當前生命值（綠色）
+            health_ratio = self.health / self.max_health
+            health_width = int(bar_width * health_ratio)
+            health_rect = pygame.Rect(bar_x, bar_y, health_width, bar_height)
+            pygame.draw.rect(screen, GREEN, health_rect)
+
+        # 繪製方向指示（小箭頭）
+        center_x = screen_x + self.width // 2
+        center_y = screen_y + self.height // 2
+
+        if self.direction > 0:
+            # 面向右邊的箭頭
+            arrow_points = [
+                (center_x + 5, center_y),
+                (center_x + 10, center_y - 3),
+                (center_x + 10, center_y + 3),
+            ]
+        else:
+            # 面向左邊的箭頭
+            arrow_points = [
+                (center_x - 5, center_y),
+                (center_x - 10, center_y - 3),
+                (center_x - 10, center_y + 3),
+            ]
+
+        pygame.draw.polygon(screen, WHITE, arrow_points)
 
         # 繪製水彈（考慮攝影機偏移）
         for bullet in self.water_bullets:
@@ -994,7 +1226,54 @@ class SniperBoss(Monster):
         self.dodge_timer = 0
         self.dodge_direction = 0  # 躲避方向
 
+        # 載入狙擊Boss圖片
+        self.load_sniper_images()
+
         print(f"🎯 狙擊Boss已生成！具備追蹤子彈、震波攻擊和躲避能力！")
+
+    def load_sniper_images(self):
+        """
+        載入狙擊Boss的左右朝向圖片\n
+        """
+        try:
+            # 載入往左看的圖片
+            self.image_left = pygame.image.load(
+                SNIPER_BOSS_LEFT_IMAGE_PATH
+            ).convert_alpha()
+            self.image_left = pygame.transform.scale(
+                self.image_left, SNIPER_BOSS_IMAGE_SIZE
+            )
+            print(f"✅ 成功載入狙擊Boss往左圖片: {SNIPER_BOSS_LEFT_IMAGE_PATH}")
+
+            # 載入往右看的圖片
+            self.image_right = pygame.image.load(
+                SNIPER_BOSS_RIGHT_IMAGE_PATH
+            ).convert_alpha()
+            self.image_right = pygame.transform.scale(
+                self.image_right, SNIPER_BOSS_IMAGE_SIZE
+            )
+            print(f"✅ 成功載入狙擊Boss往右圖片: {SNIPER_BOSS_RIGHT_IMAGE_PATH}")
+
+        except (pygame.error, FileNotFoundError) as e:
+            # 圖片載入失敗，使用預設顏色繪製
+            print(f"⚠️ 載入狙擊Boss圖片失敗: {e}")
+            print("🎨 將使用預設顏色矩形繪製")
+            self.image_left = None
+            self.image_right = None
+
+    def get_current_image(self):
+        """
+        根據朝向獲取當前應該使用的圖片\n
+        \n
+        回傳:\n
+        pygame.Surface or None: 當前方向的圖片\n
+        """
+        if self.direction < 0 and self.image_left is not None:
+            return self.image_left
+        elif self.direction >= 0 and self.image_right is not None:
+            return self.image_right
+        else:
+            return None
 
     def create_tracking_bullet(self, target_x, target_y):
         """
@@ -1457,7 +1736,7 @@ class SniperBoss(Monster):
         screen_x = self.x - camera_x
         screen_y = self.y - camera_y
 
-        # 根據狀態改變Boss顏色
+        # 根據狀態改變Boss顏色（如果使用預設繪製）
         current_color = self.color
         if self.is_dodging:
             # 躲避時變成藍色
@@ -1467,10 +1746,34 @@ class SniperBoss(Monster):
             current_color = ORANGE
 
         # 繪製Boss本體
-        boss_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
-        pygame.draw.rect(screen, current_color, boss_rect)
+        current_image = self.get_current_image()
+
+        if current_image is not None:
+            # 使用圖片繪製
+            image_to_draw = current_image
+
+            # 如果有特殊狀態，添加色彩效果
+            if current_color != self.color:
+                # 建立顏色覆蓋層
+                color_overlay = pygame.Surface(
+                    (self.width, self.height), pygame.SRCALPHA
+                )
+                color_overlay.fill((*current_color, 100))  # 半透明覆蓋
+
+                # 複製原圖並疊加顏色
+                image_to_draw = current_image.copy()
+                image_to_draw.blit(
+                    color_overlay, (0, 0), special_flags=pygame.BLEND_ALPHA_SDL2
+                )
+
+            screen.blit(image_to_draw, (screen_x, screen_y))
+        else:
+            # 圖片載入失敗，使用矩形繪製
+            boss_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
+            pygame.draw.rect(screen, current_color, boss_rect)
 
         # 繪製Boss標記邊框
+        boss_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
         pygame.draw.rect(screen, YELLOW, boss_rect, 4)
 
         # 繪製生命值條（更大的生命值條）

@@ -43,13 +43,15 @@ class GameObject:
 
     def update_rect(self):
         """
-        更新物件的碰撞矩形位置 - 當物件移動後必須呼叫\n
+        更新物件的碰撞矩形位置和大小 - 當物件移動或改變大小後必須呼叫\n
         \n
-        確保 rect 屬性與實際的 x, y 座標同步，\n
+        確保 rect 屬性與實際的 x, y, width, height 同步，\n
         這對碰撞檢測非常重要。\n
         """
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
+        self.rect.width = int(self.width)
+        self.rect.height = int(self.height)
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """

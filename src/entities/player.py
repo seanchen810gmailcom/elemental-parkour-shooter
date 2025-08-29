@@ -127,6 +127,16 @@ class Player(GameObject):
         self.crosshair_image = None
         self.load_crosshair_image()
 
+        # 機關槍圖片載入
+        self.machine_gun_image = None
+        self.machine_gun_reverse_image = None
+        self.load_machine_gun_image()
+
+        # 狙擊槍圖片載入
+        self.sniper_rifle_image = None
+        self.sniper_rifle_reverse_image = None
+        self.load_sniper_rifle_image()
+
         # 必殺技系統
         self.last_ultimate_time = 0  # 上次使用必殺技的時間
         self.ultimate_cooldown = 20.0  # 必殺技冷卻時間：20秒
@@ -309,10 +319,30 @@ class Player(GameObject):
             final_direction_x = math.cos(final_angle)
             final_direction_y = math.sin(final_angle)
 
+            # 計算子彈發射位置 - 機關槍和狙擊槍從槍口發射，其他武器從玩家中心發射
+            if self.current_weapon == "machine_gun":
+                # 機關槍：計算槍口位置作為發射點
+                gun_muzzle_x, gun_muzzle_y = self.get_gun_muzzle_position(
+                    camera_x, camera_y
+                )
+                bullet_start_x = gun_muzzle_x
+                bullet_start_y = gun_muzzle_y
+            elif self.current_weapon == "sniper":
+                # 狙擊槍：計算槍口位置作為發射點
+                sniper_muzzle_x, sniper_muzzle_y = (
+                    self.get_sniper_rifle_muzzle_position(camera_x, camera_y)
+                )
+                bullet_start_x = sniper_muzzle_x
+                bullet_start_y = sniper_muzzle_y
+            else:
+                # 其他武器：從玩家中心發射
+                bullet_start_x = player_center_x
+                bullet_start_y = player_center_y
+
             bullet_info = {
                 "type": self.current_weapon,
-                "start_x": player_center_x,
-                "start_y": player_center_y,
+                "start_x": bullet_start_x,
+                "start_y": bullet_start_y,
                 "direction_x": final_direction_x,
                 "direction_y": final_direction_y,
                 "damage": weapon_config["damage"],
@@ -322,6 +352,128 @@ class Player(GameObject):
 
         self.last_shot_time = current_time
         return bullets
+
+    def get_gun_muzzle_position(self, camera_x=0, camera_y=0):
+        """
+        計算機關槍槍口位置 - 根據玩家面向方向和瞄準角度\n
+        \n
+        參數:\n
+        camera_x (int): 攝影機 x 偏移，用於正確計算滑鼠世界座標\n
+        camera_y (int): 攝影機 y 偏移，用於正確計算滑鼠世界座標\n
+        \n
+        回傳:\n
+        tuple: (槍口x座標, 槍口y座標)\n
+        """
+        # 獲取滑鼠位置來決定槍的角度
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        world_mouse_x = mouse_x + camera_x
+        world_mouse_y = mouse_y + camera_y
+
+        # 計算玩家中心位置
+        player_center_x = self.x + self.width // 2
+        player_center_y = self.y + self.height // 2
+
+        # 計算瞄準角度
+        direction_x = world_mouse_x - player_center_x
+        direction_y = world_mouse_y - player_center_y
+
+        # 正規化方向向量
+        distance = math.sqrt(direction_x**2 + direction_y**2)
+        if distance > 0:
+            direction_x /= distance
+            direction_y /= distance
+        else:
+            direction_x = self.facing_direction
+            direction_y = 0
+
+        # 計算射擊角度，判斷使用哪種圖片的槍口偏移
+        angle = math.atan2(direction_y, direction_x)
+        angle_degrees = math.degrees(angle)
+
+        # 根據角度選擇槍口偏移參數（判斷是否為反向射擊）
+        if angle_degrees > 90 or angle_degrees < -90:
+            # 往後射擊，使用反向圖片的槍口偏移
+            muzzle_offset_x = MACHINE_GUN_REVERSE_MUZZLE_OFFSET_X
+            muzzle_offset_y = MACHINE_GUN_REVERSE_MUZZLE_OFFSET_Y
+        else:
+            # 往前射擊，使用正向圖片的槍口偏移
+            muzzle_offset_x = MACHINE_GUN_MUZZLE_OFFSET_X
+            muzzle_offset_y = MACHINE_GUN_MUZZLE_OFFSET_Y
+
+        # 根據槍的旋轉角度計算槍口位置偏移
+        cos_angle = direction_x
+        sin_angle = direction_y
+
+        # 根據槍的旋轉角度調整槍口位置
+        rotated_offset_x = muzzle_offset_x * cos_angle - muzzle_offset_y * sin_angle
+        rotated_offset_y = muzzle_offset_x * sin_angle + muzzle_offset_y * cos_angle
+
+        # 計算最終槍口位置
+        muzzle_x = player_center_x + rotated_offset_x
+        muzzle_y = player_center_y + rotated_offset_y
+
+        return muzzle_x, muzzle_y
+
+    def get_sniper_rifle_muzzle_position(self, camera_x=0, camera_y=0):
+        """
+        計算狙擊槍槍口位置 - 根據玩家面向方向和瞄準角度\n
+        \n
+        參數:\n
+        camera_x (int): 攝影機 x 偏移，用於正確計算滑鼠世界座標\n
+        camera_y (int): 攝影機 y 偏移，用於正確計算滑鼠世界座標\n
+        \n
+        回傳:\n
+        tuple: (槍口x座標, 槍口y座標)\n
+        """
+        # 獲取滑鼠位置來決定槍的角度
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        world_mouse_x = mouse_x + camera_x
+        world_mouse_y = mouse_y + camera_y
+
+        # 計算玩家中心位置
+        player_center_x = self.x + self.width // 2
+        player_center_y = self.y + self.height // 2
+
+        # 計算瞄準角度
+        direction_x = world_mouse_x - player_center_x
+        direction_y = world_mouse_y - player_center_y
+
+        # 正規化方向向量
+        distance = math.sqrt(direction_x**2 + direction_y**2)
+        if distance > 0:
+            direction_x /= distance
+            direction_y /= distance
+        else:
+            direction_x = self.facing_direction
+            direction_y = 0
+
+        # 計算射擊角度，判斷使用哪種圖片的槍口偏移
+        angle = math.atan2(direction_y, direction_x)
+        angle_degrees = math.degrees(angle)
+
+        # 根據角度選擇槍口偏移參數（判斷是否為反向射擊）
+        if angle_degrees > 90 or angle_degrees < -90:
+            # 往後射擊，使用反向圖片的槍口偏移
+            muzzle_offset_x = SNIPER_RIFLE_REVERSE_MUZZLE_OFFSET_X
+            muzzle_offset_y = SNIPER_RIFLE_REVERSE_MUZZLE_OFFSET_Y
+        else:
+            # 往前射擊，使用正向圖片的槍口偏移
+            muzzle_offset_x = SNIPER_RIFLE_MUZZLE_OFFSET_X
+            muzzle_offset_y = SNIPER_RIFLE_MUZZLE_OFFSET_Y
+
+        # 根據槍的旋轉角度計算槍口位置偏移
+        cos_angle = direction_x
+        sin_angle = direction_y
+
+        # 根據槍的旋轉角度調整槍口位置
+        rotated_offset_x = muzzle_offset_x * cos_angle - muzzle_offset_y * sin_angle
+        rotated_offset_y = muzzle_offset_x * sin_angle + muzzle_offset_y * cos_angle
+
+        # 計算最終槍口位置
+        muzzle_x = player_center_x + rotated_offset_x
+        muzzle_y = player_center_y + rotated_offset_y
+
+        return muzzle_x, muzzle_y
 
     def melee_attack(self):
         """
@@ -772,6 +924,14 @@ class Player(GameObject):
 
         pygame.draw.polygon(screen, WHITE, triangle_points)
 
+        # 繪製機關槍（當使用機關槍時）
+        if self.current_weapon == "machine_gun":
+            self.draw_machine_gun(screen, camera_x, camera_y)
+
+        # 繪製狙擊槍（當使用狙擊槍時）
+        if self.current_weapon == "sniper":
+            self.draw_sniper_rifle(screen, camera_x, camera_y)
+
         # 移除滑牆白色邊框特效，保持簡潔外觀
 
     def load_crosshair_image(self):
@@ -802,6 +962,302 @@ class Player(GameObject):
             # 圖片載入失敗，將使用預設十字準心
             print(f"準心圖片載入失敗: {e}")
             self.crosshair_image = None
+
+    def load_sniper_rifle_image(self):
+        """
+        載入狙擊槍圖片 - 處理正向和反向圖片載入和縮放\n
+        \n
+        功能:\n
+        1. 嘗試載入指定的狙擊槍正向圖片檔案（往右射擊）\n
+        2. 嘗試載入指定的狙擊槍反向圖片檔案（往左射擊）\n
+        3. 將圖片縮放到適當大小\n
+        4. 如果載入失敗，使用預設的矩形顯示\n
+        \n
+        圖片處理:\n
+        - 支援 PNG 格式的透明背景圖片\n
+        - 自動縮放到 SNIPER_RIFLE_IMAGE_SIZE 尺寸\n
+        - 槍口位置在圖片的槍管尖端\n
+        """
+        try:
+            # 載入狙擊槍正向圖片（往右射擊）
+            self.sniper_rifle_image = pygame.image.load(
+                SNIPER_RIFLE_IMAGE_PATH
+            ).convert_alpha()
+            # 縮放到指定大小
+            self.sniper_rifle_image = pygame.transform.scale(
+                self.sniper_rifle_image, SNIPER_RIFLE_IMAGE_SIZE
+            )
+            print(f"成功載入狙擊槍正向圖片: {SNIPER_RIFLE_IMAGE_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            # 圖片載入失敗，將使用預設矩形顯示
+            print(f"狙擊槍正向圖片載入失敗: {e}")
+            self.sniper_rifle_image = None
+
+        try:
+            # 載入狙擊槍反向圖片（往左射擊）
+            self.sniper_rifle_reverse_image = pygame.image.load(
+                SNIPER_RIFLE_REVERSE_IMAGE_PATH
+            ).convert_alpha()
+            # 縮放到指定大小
+            self.sniper_rifle_reverse_image = pygame.transform.scale(
+                self.sniper_rifle_reverse_image, SNIPER_RIFLE_IMAGE_SIZE
+            )
+            print(f"成功載入狙擊槍反向圖片: {SNIPER_RIFLE_REVERSE_IMAGE_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            # 反向圖片載入失敗，將使用預設顯示
+            print(f"狙擊槍反向圖片載入失敗: {e}")
+            self.sniper_rifle_reverse_image = None
+
+    def load_machine_gun_image(self):
+        """
+        載入機關槍圖片 - 處理正向和反向圖片載入和縮放\n
+        \n
+        功能:\n
+        1. 嘗試載入指定的機關槍正向圖片檔案\n
+        2. 嘗試載入指定的機關槍反向圖片檔案（往後射擊時使用）\n
+        3. 將圖片縮放到適當大小\n
+        4. 如果載入失敗，使用預設的矩形顯示\n
+        \n
+        圖片處理:\n
+        - 支援 PNG 格式的透明背景圖片\n
+        - 自動縮放到 MACHINE_GUN_IMAGE_SIZE 尺寸\n
+        - 槍口位置在圖片的右上角下面一點\n
+        """
+        try:
+            # 載入機關槍正向圖片
+            self.machine_gun_image = pygame.image.load(
+                MACHINE_GUN_IMAGE_PATH
+            ).convert_alpha()
+            # 縮放到指定大小
+            self.machine_gun_image = pygame.transform.scale(
+                self.machine_gun_image, MACHINE_GUN_IMAGE_SIZE
+            )
+            print(f"成功載入機關槍圖片: {MACHINE_GUN_IMAGE_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            # 圖片載入失敗，將使用預設矩形顯示
+            print(f"機關槍圖片載入失敗: {e}")
+            self.machine_gun_image = None
+
+        try:
+            # 載入機關槍反向圖片（往後射擊時使用）
+            self.machine_gun_reverse_image = pygame.image.load(
+                MACHINE_GUN_REVERSE_IMAGE_PATH
+            ).convert_alpha()
+            # 縮放到指定大小
+            self.machine_gun_reverse_image = pygame.transform.scale(
+                self.machine_gun_reverse_image, MACHINE_GUN_IMAGE_SIZE
+            )
+            print(f"成功載入機關槍反向圖片: {MACHINE_GUN_REVERSE_IMAGE_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            # 反向圖片載入失敗，將使用預設顯示
+            print(f"機關槍反向圖片載入失敗: {e}")
+            self.machine_gun_reverse_image = None
+            print(f"機關槍反向圖片載入失敗: {e}")
+            self.machine_gun_reverse_image = None
+
+    def draw_machine_gun(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製機關槍 - 根據瞄準方向旋轉機關槍圖片\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 要繪製到的螢幕表面\n
+        camera_x (int): 攝影機 x 偏移\n
+        camera_y (int): 攝影機 y 偏移\n
+        \n
+        繪製邏輯:\n
+        1. 只有當使用機關槍且圖片載入成功時才繪製\n
+        2. 計算瞄準角度並旋轉槍的圖片\n
+        3. 槍的中心位置跟隨玩家\n
+        4. 圖片載入失敗時繪製簡單的矩形代替\n
+        """
+        if self.machine_gun_image is not None:
+            # 獲取滑鼠位置來決定槍的角度
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            world_mouse_x = mouse_x + camera_x
+            world_mouse_y = mouse_y + camera_y
+
+            # 計算玩家中心位置（世界座標）
+            player_center_x = self.x + self.width // 2
+            player_center_y = self.y + self.height // 2
+
+            # 計算瞄準角度
+            direction_x = world_mouse_x - player_center_x
+            direction_y = world_mouse_y - player_center_y
+
+            # 計算角度（弧度轉角度）
+            angle = math.atan2(direction_y, direction_x)
+            angle_degrees = math.degrees(angle) + MACHINE_GUN_ROTATION_OFFSET
+
+            # 根據角度選擇使用哪個圖片
+            if angle_degrees > 90 or angle_degrees < -90:
+                # 往後射擊時使用反向圖片（啊哈.png）
+                if self.machine_gun_reverse_image is not None:
+                    gun_image = self.machine_gun_reverse_image
+                    # 調整角度使反向圖片正確朝向
+                    angle_degrees = (
+                        angle_degrees - 180
+                        if angle_degrees > 0
+                        else angle_degrees + 180
+                    )
+                else:
+                    # 沒有反向圖片時，使用翻轉的正向圖片
+                    gun_image = pygame.transform.flip(
+                        self.machine_gun_image, False, True
+                    )
+                    angle_degrees = (
+                        angle_degrees - 180
+                        if angle_degrees > 0
+                        else angle_degrees + 180
+                    )
+            else:
+                # 往前射擊時使用正常圖片
+                gun_image = self.machine_gun_image
+
+            # 旋轉機關槍圖片
+            rotated_gun = pygame.transform.rotate(gun_image, -angle_degrees)
+
+            # 計算旋轉後圖片的新中心位置（螢幕座標）
+            gun_rect = rotated_gun.get_rect()
+            gun_rect.center = (player_center_x - camera_x, player_center_y - camera_y)
+
+            # 繪製旋轉後的機關槍
+            screen.blit(rotated_gun, gun_rect)
+        else:
+            # 圖片載入失敗，繪製簡單的槍械矩形代替
+            # 計算槍的位置和角度
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            world_mouse_x = mouse_x + camera_x
+            world_mouse_y = mouse_y + camera_y
+
+            player_center_x = self.x + self.width // 2
+            player_center_y = self.y + self.height // 2
+
+            # 計算方向
+            direction_x = world_mouse_x - player_center_x
+            direction_y = world_mouse_y - player_center_y
+            distance = math.sqrt(direction_x**2 + direction_y**2)
+
+            if distance > 0:
+                direction_x /= distance
+                direction_y /= distance
+            else:
+                direction_x = self.facing_direction
+                direction_y = 0
+
+            # 繪製簡單的槍械線段（從玩家中心向滑鼠方向）
+            gun_length = 30
+            end_x = player_center_x - camera_x + direction_x * gun_length
+            end_y = player_center_y - camera_y + direction_y * gun_length
+
+            pygame.draw.line(
+                screen,
+                MACHINE_GUN_COLOR,
+                (player_center_x - camera_x, player_center_y - camera_y),
+                (int(end_x), int(end_y)),
+                4,
+            )
+
+    def draw_sniper_rifle(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製狙擊槍 - 根據瞄準方向旋轉狙擊槍圖片\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 要繪製到的螢幕表面\n
+        camera_x (int): 攝影機 x 偏移\n
+        camera_y (int): 攝影機 y 偏移\n
+        \n
+        繪製邏輯:\n
+        1. 只有當使用狙擊槍且圖片載入成功時才繪製\n
+        2. 計算瞄準角度並旋轉槍的圖片\n
+        3. 槍的中心位置跟隨玩家\n
+        4. 圖片載入失敗時繪製簡單的矩形代替\n
+        """
+        if self.sniper_rifle_image is not None:
+            # 獲取滑鼠位置來決定槍的角度
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            world_mouse_x = mouse_x + camera_x
+            world_mouse_y = mouse_y + camera_y
+
+            # 計算玩家中心位置（世界座標）
+            player_center_x = self.x + self.width // 2
+            player_center_y = self.y + self.height // 2
+
+            # 計算瞄準角度
+            direction_x = world_mouse_x - player_center_x
+            direction_y = world_mouse_y - player_center_y
+
+            # 計算角度（弧度轉角度）
+            angle = math.atan2(direction_y, direction_x)
+            angle_degrees = math.degrees(angle) + SNIPER_RIFLE_ROTATION_OFFSET
+
+            # 根據角度選擇使用哪個圖片
+            if angle_degrees > 90 or angle_degrees < -90:
+                # 往後射擊時使用反向圖片（哈哈哈.png）
+                if self.sniper_rifle_reverse_image is not None:
+                    rifle_image = self.sniper_rifle_reverse_image
+                    # 調整角度使反向圖片正確朝向
+                    angle_degrees = (
+                        angle_degrees - 180
+                        if angle_degrees > 0
+                        else angle_degrees + 180
+                    )
+                else:
+                    # 沒有反向圖片時，使用翻轉的正向圖片
+                    rifle_image = pygame.transform.flip(
+                        self.sniper_rifle_image, False, True
+                    )
+                    angle_degrees = (
+                        angle_degrees - 180
+                        if angle_degrees > 0
+                        else angle_degrees + 180
+                    )
+            else:
+                # 往前射擊時使用正常圖片
+                rifle_image = self.sniper_rifle_image
+
+            # 旋轉狙擊槍圖片
+            rotated_rifle = pygame.transform.rotate(rifle_image, -angle_degrees)
+
+            # 計算旋轉後圖片的新中心位置（螢幕座標）
+            rifle_rect = rotated_rifle.get_rect()
+            rifle_rect.center = (player_center_x - camera_x, player_center_y - camera_y)
+
+            # 繪製旋轉後的狙擊槍
+            screen.blit(rotated_rifle, rifle_rect)
+        else:
+            # 圖片載入失敗，繪製簡單的槍械矩形代替
+            # 計算槍的位置和角度
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            world_mouse_x = mouse_x + camera_x
+            world_mouse_y = mouse_y + camera_y
+
+            player_center_x = self.x + self.width // 2
+            player_center_y = self.y + self.height // 2
+
+            # 計算方向
+            direction_x = world_mouse_x - player_center_x
+            direction_y = world_mouse_y - player_center_y
+            distance = math.sqrt(direction_x**2 + direction_y**2)
+
+            if distance > 0:
+                direction_x /= distance
+                direction_y /= distance
+            else:
+                direction_x = self.facing_direction
+                direction_y = 0
+
+            # 繪製簡單的槍械線段（從玩家中心向滑鼠方向）
+            rifle_length = 40  # 比機關槍稍長
+            end_x = player_center_x - camera_x + direction_x * rifle_length
+            end_y = player_center_y - camera_y + direction_y * rifle_length
+
+            pygame.draw.line(
+                screen,
+                SNIPER_RIFLE_COLOR,
+                (player_center_x - camera_x, player_center_y - camera_y),
+                (int(end_x), int(end_y)),
+                6,  # 比機關槍稍粗
+            )
 
     def draw_crosshair(self, screen, camera_x=0, camera_y=0):
         """

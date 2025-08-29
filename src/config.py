@@ -91,8 +91,8 @@ BOSS_WIDTH_MULTIPLIER = 2
 BOSS_HEIGHT_MULTIPLIER = 2
 
 # 水怪
-WATER_MONSTER_WIDTH = 45
-WATER_MONSTER_HEIGHT = 45
+WATER_MONSTER_WIDTH = 90  # 放大一倍：45 → 90
+WATER_MONSTER_HEIGHT = 90  # 放大一倍：45 → 90
 WATER_MONSTER_COLOR = BLUE
 WATER_MONSTER_SPEED = 6  # 提升移動速度 5→6
 WATER_MONSTER_HEALTH = 90  # 提升血量 60→90 (+50%)
@@ -243,22 +243,78 @@ MINIMAP_DEFAULT_MONSTER_COLOR = (255, 0, 0)  # 預設紅色
 
 # 狙擊槍準心圖片設定
 CROSSHAIR_IMAGE_PATH = (
-    "—Pngtree—crosshair simple split sight graphics_6809012.png"  # 準心圖片路徑
+    "素材/—Pngtree—crosshair simple split sight graphics_6809012.png"  # 準心圖片路徑
 )
 CROSSHAIR_SIZE = 50  # 準心圖片大小（像素）- 適合狙擊槍使用的尺寸
 CROSSHAIR_COLOR = (255, 0, 0)  # 備用準心顏色（當圖片載入失敗時使用）
 
+######################機關槍武器設定######################
+
+# 機關槍圖片設定
+MACHINE_GUN_IMAGE_PATH = "素材/fad95fd7547c5b8858130e235f96b0b4.png"  # 機關槍圖片路徑
+MACHINE_GUN_REVERSE_IMAGE_PATH = "素材/啊哈.png"  # 機關槍反向圖片路徑（往後射擊時使用）
+MACHINE_GUN_IMAGE_SIZE = (100, 50)  # 機關槍圖片大小（寬度, 高度）- 放大圖片
+MACHINE_GUN_ROTATION_OFFSET = 0  # 圖片旋轉偏移角度，用於對齊槍口
+
+# 正向機關槍槍口偏移（原始圖片）
+MACHINE_GUN_MUZZLE_OFFSET_X = 42  # 槍口相對於槍圖片中心的X偏移（往右上角下面一點）
+MACHINE_GUN_MUZZLE_OFFSET_Y = -8  # 槍口相對於槍圖片中心的Y偏移（往右上角下面一點）
+
+# 反向機關槍槍口偏移（啊哈.png 圖片）
+MACHINE_GUN_REVERSE_MUZZLE_OFFSET_X = -42  # 反向圖片的槍口X偏移（相對於圖片中心）
+MACHINE_GUN_REVERSE_MUZZLE_OFFSET_Y = -8  # 反向圖片的槍口Y偏移（相對於圖片中心）
+
+MACHINE_GUN_COLOR = BLACK  # 機關槍備用顏色（當圖片載入失敗時使用）
+
+######################狙擊槍武器設定######################
+
+# 狙擊槍圖片設定
+SNIPER_RIFLE_IMAGE_PATH = "素材/20052023635pic_outside_ff97cd246501-removebg-preview.png"  # 狙擊槍正向圖片路徑（往右射擊）
+SNIPER_RIFLE_REVERSE_IMAGE_PATH = "素材/哈哈哈.png"  # 狙擊槍反向圖片路徑（往左射擊）
+SNIPER_RIFLE_IMAGE_SIZE = (120, 60)  # 狙擊槍圖片大小（寬度, 高度）- 比機關槍稍大
+SNIPER_RIFLE_ROTATION_OFFSET = 0  # 圖片旋轉偏移角度，用於對齊槍口
+
+# 正向狙擊槍槍口偏移（往右射擊圖片）
+SNIPER_RIFLE_MUZZLE_OFFSET_X = 50  # 槍口相對於槍圖片中心的X偏移（往槍管尖端）
+SNIPER_RIFLE_MUZZLE_OFFSET_Y = -5  # 槍口相對於槍圖片中心的Y偏移（槍管中心）
+
+# 反向狙擊槍槍口偏移（往左射擊圖片）
+SNIPER_RIFLE_REVERSE_MUZZLE_OFFSET_X = -50  # 反向圖片的槍口X偏移（相對於圖片中心）
+SNIPER_RIFLE_REVERSE_MUZZLE_OFFSET_Y = -5  # 反向圖片的槍口Y偏移（相對於圖片中心）
+
+SNIPER_RIFLE_COLOR = RED  # 狙擊槍備用顏色（當圖片載入失敗時使用）
+
+######################怪物圖片設定######################
+
+# 怪物圖片檔案路徑
+LAVA_MONSTER_IMAGE_PATH = "素材/去背的1.png"  # 小火怪圖片
+WATER_MONSTER_IMAGE_PATH = "素材/去背的2.png"  # 小水怪圖片
+LAVA_BOSS_IMAGE_PATH = "素材/去背的3.png"  # 岩漿Boss圖片
+SNIPER_BOSS_LEFT_IMAGE_PATH = "素材/去背的4.png"  # 狙擊Boss往左看圖片
+SNIPER_BOSS_RIGHT_IMAGE_PATH = "素材/去背的4拷貝.png"  # 狙擊Boss往右看圖片
+
+# 怪物圖片大小設定
+LAVA_MONSTER_IMAGE_SIZE = (LAVA_MONSTER_WIDTH, LAVA_MONSTER_HEIGHT)  # 小火怪圖片大小
+WATER_MONSTER_IMAGE_SIZE = (WATER_MONSTER_WIDTH, WATER_MONSTER_HEIGHT)  # 小水怪圖片大小
+LAVA_BOSS_IMAGE_SIZE = (
+    LAVA_TORNADO_BOSS_WIDTH,
+    LAVA_TORNADO_BOSS_HEIGHT,
+)  # 岩漿Boss圖片大小（放大到Boss尺寸）
+SNIPER_BOSS_IMAGE_SIZE = (SNIPER_BOSS_WIDTH, SNIPER_BOSS_HEIGHT)  # 狙擊Boss圖片大小
+
 ######################音效設定######################
 
 # 音效檔案路徑
-SHOOTING_SOUND_PATH = "attack-laser-128280 (mp3cut.net).mp3"
+SHOOTING_SOUND_PATH = "素材/attack-laser-128280 (mp3cut.net).mp3"
 ULTIMATE_SOUND_PATH = (
-    "heavy-thunder-sound-effect-no-copyright-338980.mp3"  # 必殺技雷電音效
+    "素材/heavy-thunder-sound-effect-no-copyright-338980.mp3"  # 必殺技雷電音效
 )
-SNIPER_INCOMING_MUSIC_PATH = "sniper_incoming.mp3"  # 狙擊怪來襲背景音樂
-GAME_OVER_SOUND_PATH = "Game Over.wav"  # 玩家死亡音效
-VICTORY_SOUND_PATH = "Stage Win (Super Mario) - QuickSounds.com.mp3"  # 勝利星星音效
-HEALTH_PICKUP_SOUND_PATH = "吃到寶物.wav"  # 愛心道具音效
+SNIPER_INCOMING_MUSIC_PATH = "素材/sniper_incoming.mp3"  # 狙擊怪來襲背景音樂
+GAME_OVER_SOUND_PATH = "素材/Game Over.wav"  # 玩家死亡音效
+VICTORY_SOUND_PATH = (
+    "素材/Stage Win (Super Mario) - QuickSounds.com.mp3"  # 勝利星星音效
+)
+HEALTH_PICKUP_SOUND_PATH = "素材/吃到寶物.wav"  # 愛心道具音效
 
 # 音效音量設定（0.0 - 1.0）
 SHOOTING_SOUND_VOLUME = 0.2  # 射擊音效音量，降低讓必殺技更突出

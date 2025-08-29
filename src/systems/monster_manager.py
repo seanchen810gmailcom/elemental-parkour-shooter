@@ -250,6 +250,16 @@ class MonsterManager:
             self.boss.width = LAVA_MONSTER_WIDTH * BOSS_WIDTH_MULTIPLIER
             self.boss.height = LAVA_MONSTER_HEIGHT * BOSS_HEIGHT_MULTIPLIER
 
+            # 重新調整Boss位置，確保它站在地面上而不是穿透
+            self.boss.y = platform.y - self.boss.height
+
+            # 重新載入Boss大小的圖片
+            if hasattr(self.boss, "reload_image_if_boss"):
+                self.boss.reload_image_if_boss()
+            
+            # 更新Boss的碰撞矩形大小（修復子彈碰撞問題）
+            self.boss.update_rect()
+
             # Boss血量設定為1500（提升難度）
             self.boss.max_health = 1500
             self.boss.health = self.boss.max_health
