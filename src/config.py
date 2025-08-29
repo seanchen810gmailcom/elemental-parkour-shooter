@@ -44,7 +44,9 @@ GRAVITY = 1.2
 MAX_FALL_SPEED = 20
 WALL_JUMP_STRENGTH = -17  # 增強爬牆跳
 WALL_JUMP_PUSH = 12
-DOUBLE_JUMP_STRENGTH = -15  # 增強二段跳
+DOUBLE_JUMP_STRENGTH = (
+    -15
+)  # 已棄用：現在三段跳都使用 PLAYER_JUMP_STRENGTH 確保每次跳躍高度一致
 
 # 玩家死亡設定
 PLAYER_LIVES = 2  # 玩家總生命次數 - 從3降到2，增加挑戰性
@@ -107,8 +109,8 @@ TORNADO_MONSTER_HEALTH = 65  # 提升血量 40→65 (+62.5%)
 TORNADO_MONSTER_DAMAGE = 50  # 提升傷害 35→50 (+43%)
 
 # 狙擊Boss
-SNIPER_BOSS_WIDTH = 65
-SNIPER_BOSS_HEIGHT = 80
+SNIPER_BOSS_WIDTH = 130  # 縮小：原本195 → 130 (約67%大小)
+SNIPER_BOSS_HEIGHT = 160  # 縮小：原本240 → 160 (約67%大小)
 SNIPER_BOSS_COLOR = (150, 0, 150)  # 深紫色
 SNIPER_BOSS_SPEED = 3  # 降低移動速度避免被跑酷板卡住（從8降至3）
 SNIPER_BOSS_HEALTH = 1500  # 與岩漿Boss相同的血量
@@ -245,6 +247,24 @@ MINIMAP_DEFAULT_MONSTER_COLOR = (255, 0, 0)  # 預設紅色
 
 ######################狙擊槍準心設定######################
 
+######################Boss子彈設定######################
+
+# Boss子彈速度設定
+BOSS_BULLET_SPEED = BULLET_SPEED / 3  # 比狙擊槍子彈慢三倍 (15/3 = 5)
+BOSS_BULLET_LIFETIME = 10.0  # Boss子彈生存時間（10秒）
+BOSS_BULLET_DAMAGE = 60  # Boss子彈傷害值
+
+# 岩漿Boss子彈設定
+LAVA_BOSS_BULLET_INTERVAL = 3.0  # 岩漿Boss每3秒發射一次子彈
+LAVA_BOSS_BULLET_COLOR = FIRE_BULLET_COLOR  # 火焰子彈顏色
+
+# 狙擊Boss子彈設定
+SNIPER_BOSS_BULLET_INTERVAL = 3.0  # 狙擊Boss每3秒發射一次子彈
+SNIPER_BOSS_BULLET_COLOR = PURPLE  # 紫色追蹤子彈
+SNIPER_BOSS_TRACKING_SPEED = 0.8  # 追蹤子彈的追蹤速度倍數
+
+######################狙擊槍準心設定######################
+
 # 狙擊槍準心圖片設定
 CROSSHAIR_IMAGE_PATH = (
     "素材/—Pngtree—crosshair simple split sight graphics_6809012.png"  # 準心圖片路徑
@@ -314,6 +334,31 @@ SHOTGUN_SPREAD_ANGLE = 1.0  # 散射角度（弧度）
 SHOTGUN_DAMAGE_PER_PELLET = 25  # 每顆彈丸的傷害
 SHOTGUN_RANGE_MODIFIER = 0.8  # 射程修正（相對於其他武器）
 
+######################衝鋒槍武器設定######################
+
+# 衝鋒槍圖片設定
+ASSAULT_RIFLE_IMAGE_PATH = (
+    "素材/B&T_APC_9_K_side_profile.png"  # 衝鋒槍正向圖片路徑（往右射擊）
+)
+ASSAULT_RIFLE_REVERSE_IMAGE_PATH = (
+    "素材/B&T_APC_9_K_side_profile拷貝.png"  # 衝鋒槍反向圖片路徑（往左射擊）
+)
+ASSAULT_RIFLE_IMAGE_SIZE = (
+    105,
+    55,
+)  # 衝鋒槍圖片大小（寬度, 高度）- 介於機關槍和散彈槍之間
+ASSAULT_RIFLE_ROTATION_OFFSET = 0  # 圖片旋轉偏移角度，用於對齊槍口
+
+# 正向衝鋒槍槍口偏移（往右射擊圖片）
+ASSAULT_RIFLE_MUZZLE_OFFSET_X = 47  # 槍口相對於槍圖片中心的X偏移（往槍管尖端）
+ASSAULT_RIFLE_MUZZLE_OFFSET_Y = -5  # 槍口相對於槍圖片中心的Y偏移（槍管中心）
+
+# 反向衝鋒槍槍口偏移（往左射擊圖片）
+ASSAULT_RIFLE_REVERSE_MUZZLE_OFFSET_X = -47  # 反向圖片的槍口X偏移（相對於圖片中心）
+ASSAULT_RIFLE_REVERSE_MUZZLE_OFFSET_Y = -5  # 反向圖片的槍口Y偏移（相對於圖片中心）
+
+ASSAULT_RIFLE_COLOR = PURPLE  # 衝鋒槍備用顏色（當圖片載入失敗時使用）
+
 ######################怪物圖片設定######################
 
 # 怪物圖片檔案路徑
@@ -330,7 +375,7 @@ LAVA_BOSS_IMAGE_SIZE = (
     LAVA_TORNADO_BOSS_WIDTH,
     LAVA_TORNADO_BOSS_HEIGHT,
 )  # 岩漿Boss圖片大小（放大到Boss尺寸）
-SNIPER_BOSS_IMAGE_SIZE = (SNIPER_BOSS_WIDTH, SNIPER_BOSS_HEIGHT)  # 狙擊Boss圖片大小
+SNIPER_BOSS_IMAGE_SIZE = (SNIPER_BOSS_WIDTH, SNIPER_BOSS_HEIGHT)  # 狙擊Boss圖片大小（調整後的尺寸）
 
 ######################音效設定######################
 

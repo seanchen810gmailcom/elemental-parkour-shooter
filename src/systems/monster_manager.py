@@ -203,8 +203,8 @@ class MonsterManager:
         回傳:\n
         bool: True 表示應該生成Boss\n
         """
-        # Boss必須等玩家擊敗10個小怪後才能出現
-        if self.monsters_killed < 10:
+        # Boss必須等玩家擊敗3個小怪後才能出現（測試用，原本為10個）
+        if self.monsters_killed < 3:
             return False
 
         # 第一階段：岩漿Boss
@@ -244,7 +244,7 @@ class MonsterManager:
         # 根據Boss階段生成不同類型的Boss
         if self.boss_stage == 1:
             # 第一階段：岩漿Boss
-            self.boss = LavaMonster(spawn_x, spawn_y)
+            self.boss = LavaMonster(spawn_x, spawn_y, allow_platform_collision=False)
 
             # 調整Boss體積為兩倍大
             self.boss.width = LAVA_MONSTER_WIDTH * BOSS_WIDTH_MULTIPLIER
@@ -276,7 +276,7 @@ class MonsterManager:
             self.boss.heal_amount = 2  # 每次回血2點
 
             # 添加火焰子彈功能 - 提升攻擊頻率
-            self.boss.fire_bullet_cooldown = 1.5
+            self.boss.fire_bullet_cooldown = LAVA_BOSS_BULLET_INTERVAL  # 改為3秒間隔
             self.boss.last_fire_bullet_time = 0
             self.boss.fire_bullets = []
 
@@ -287,7 +287,13 @@ class MonsterManager:
 
         elif self.boss_stage == 2:
             # 第二階段：狙擊Boss
-            self.boss = SniperBoss(spawn_x, spawn_y)
+            self.boss = SniperBoss(spawn_x, spawn_y, allow_platform_collision=False)
+
+            # 為狙擊Boss添加新的子彈系統
+            self.boss.new_bullet_cooldown = SNIPER_BOSS_BULLET_INTERVAL  # 3秒間隔
+            self.boss.last_new_bullet_time = 0
+            self.boss.boss_bullets = []  # 新的Boss子彈系統
+
             print(f"🎯 最終Boss - 狙擊Boss已生成！具備追蹤子彈、震波攻擊和躲避能力！")
 
             # 狙擊Boss出現時同時生成3個額外小怪
@@ -530,11 +536,12 @@ class MonsterManager:
             fire_bullet = {
                 "x": start_x,
                 "y": start_y,
-                "velocity_x": direction_x * 10,  # 火焰子彈速度
-                "velocity_y": direction_y * 10,
-                "damage": int(self.boss.damage * 0.8),  # 火焰子彈傷害
-                "lifetime": 4.0,  # 4秒後消失
+                "velocity_x": direction_x * BOSS_BULLET_SPEED,  # 使用新的Boss子彈速度
+                "velocity_y": direction_y * BOSS_BULLET_SPEED,
+                "damage": BOSS_BULLET_DAMAGE,  # 使用新的Boss子彈傷害
+                "lifetime": BOSS_BULLET_LIFETIME,  # 10秒生存時間
                 "created_time": current_time,
+                "bullet_type": "lava_boss",  # 標記為岩漿Boss子彈
             }
 
             self.boss.fire_bullets.append(fire_bullet)
@@ -543,16 +550,85 @@ class MonsterManager:
 
         return None
 
+    def create_sniper_boss_tracking_bullet(self, target_x, target_y):
+        """
+        創建狙擊Boss追蹤子彈\n
+        \n
+        參數:\n
+        target_x (float): 目標 X 座標\n
+        target_y (float): 目標 Y 座標\n
+        \n
+        回傳:\n
+        dict or None: 追蹤子彈資訊\n
+        """
+        if not self.boss or not hasattr(self.boss, "new_bullet_cooldown"):
+            return None
+
+        current_time = time.time()
+        if (
+            current_time - self.boss.last_new_bullet_time
+            < self.boss.new_bullet_cooldown
+        ):
+            return None
+
+        # 計算發射方向
+        start_x = self.boss.x + self.boss.width // 2
+        start_y = self.boss.y + self.boss.height // 2
+
+        dx = target_x - start_x
+        dy = target_y - start_y
+        distance = math.sqrt(dx**2 + dy**2)
+
+        if distance > 0:
+            direction_x = dx / distance
+            direction_y = dy / distance
+
+            tracking_bullet = {
+                "x": start_x,
+                "y": start_y,
+                "velocity_x": direction_x * BOSS_BULLET_SPEED,  # 使用Boss子彈速度
+                "velocity_y": direction_y * BOSS_BULLET_SPEED,
+                "target_x": target_x,  # 追蹤目標
+                "target_y": target_y,
+                "damage": BOSS_BULLET_DAMAGE,  # 使用Boss子彈傷害
+                "lifetime": BOSS_BULLET_LIFETIME,  # 10秒生存時間
+                "created_time": current_time,
+                "bullet_type": "sniper_boss_tracking",  # 標記為狙擊Boss追蹤子彈
+                "tracking_strength": SNIPER_BOSS_TRACKING_SPEED,  # 追蹤強度
+            }
+
+            self.boss.boss_bullets.append(tracking_bullet)
+            self.boss.last_new_bullet_time = current_time
+            print(f"🎯 狙擊Boss發射追蹤子彈！")
+            return tracking_bullet
+
+        return None
+
     def update_boss_fire_bullets(self, player):
         """
-        更新Boss火焰子彈狀態並檢查碰撞\n
+        更新Boss火焰子彈和狙擊Boss追蹤子彈狀態並檢查碰撞\n
         \n
         參數:\n
         player (Player): 玩家物件\n
         """
-        if not self.boss or not hasattr(self.boss, "fire_bullets"):
+        if not self.boss:
             return
 
+        # 處理岩漿Boss的火焰子彈（舊系統）
+        if hasattr(self.boss, "fire_bullets"):
+            self.update_lava_boss_fire_bullets(player)
+
+        # 處理狙擊Boss的追蹤子彈（新系統）
+        if hasattr(self.boss, "boss_bullets"):
+            self.update_sniper_boss_bullets(player)
+
+    def update_lava_boss_fire_bullets(self, player):
+        """
+        更新岩漿Boss火焰子彈狀態\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        """
         current_time = time.time()
         active_bullets = []
 
@@ -590,6 +666,78 @@ class MonsterManager:
             if 80 <= distance <= 250:  # 火焰子彈的有效攻擊範圍
                 self.create_boss_fire_bullet(player.x, player.y)
 
+    def update_sniper_boss_bullets(self, player):
+        """
+        更新狙擊Boss追蹤子彈狀態\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        """
+        current_time = time.time()
+        active_bullets = []
+
+        for bullet in self.boss.boss_bullets:
+            # 檢查生存時間
+            if current_time - bullet["created_time"] > bullet["lifetime"]:
+                continue
+
+            # 更新追蹤目標位置
+            bullet["target_x"] = player.x + player.width // 2
+            bullet["target_y"] = player.y + player.height // 2
+
+            # 計算朝向目標的方向
+            dx = bullet["target_x"] - bullet["x"]
+            dy = bullet["target_y"] - bullet["y"]
+            distance = math.sqrt(dx**2 + dy**2)
+
+            if distance > 0:
+                # 計算新的追蹤方向
+                direction_x = dx / distance
+                direction_y = dy / distance
+
+                # 混合當前速度和追蹤方向，實現平滑追蹤
+                tracking_strength = bullet["tracking_strength"]
+                bullet["velocity_x"] = (1 - tracking_strength) * bullet[
+                    "velocity_x"
+                ] + tracking_strength * direction_x * BOSS_BULLET_SPEED
+                bullet["velocity_y"] = (1 - tracking_strength) * bullet[
+                    "velocity_y"
+                ] + tracking_strength * direction_y * BOSS_BULLET_SPEED
+
+            # 更新位置
+            bullet["x"] += bullet["velocity_x"]
+            bullet["y"] += bullet["velocity_y"]
+
+            # 檢查與玩家的碰撞
+            bullet_rect = pygame.Rect(bullet["x"] - 8, bullet["y"] - 8, 16, 16)
+            if bullet_rect.colliderect(player.rect):
+                # 追蹤子彈擊中玩家
+                player.take_damage(bullet["damage"])
+                print(f"🎯 狙擊Boss追蹤子彈擊中玩家！造成 {bullet['damage']} 點傷害")
+                continue  # 擊中後子彈消失
+
+            # 檢查是否超出螢幕邊界太遠（避免無限追蹤）
+            if (
+                -200 <= bullet["x"] <= SCREEN_WIDTH + 200
+                and -200 <= bullet["y"] <= SCREEN_HEIGHT + 200
+            ):
+                active_bullets.append(bullet)
+
+        self.boss.boss_bullets = active_bullets
+
+        # 嘗試發射新的追蹤子彈
+        if self.boss.is_alive and player.is_alive:
+            # 計算與玩家的距離
+            dx = player.x - self.boss.x
+            dy = player.y - self.boss.y
+            distance = math.sqrt(dx**2 + dy**2)
+
+            # 如果玩家在攻擊範圍內，發射追蹤子彈
+            if distance <= 300:  # 狙擊Boss的攻擊範圍
+                self.create_sniper_boss_tracking_bullet(
+                    player.x + player.width // 2, player.y + player.height // 2
+                )
+
     def draw(self, screen, camera_x=0, camera_y=0):
         """
         繪製所有怪物\n
@@ -614,6 +762,30 @@ class MonsterManager:
 
             if hasattr(self.boss, "tracking_bullets"):  # 狙擊Boss
                 boss_text = font.render("🎯 SNIPER BOSS", True, PURPLE)
+
+                # 繪製狙擊Boss的追蹤子彈
+                if hasattr(self.boss, "boss_bullets"):
+                    for bullet in self.boss.boss_bullets:
+                        bullet_screen_x = bullet["x"] - camera_x
+                        bullet_screen_y = bullet["y"] - camera_y
+                        # 只繪製在螢幕範圍內的追蹤子彈
+                        if (
+                            -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
+                            and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
+                        ):
+                            # 繪製追蹤子彈：紫色外圈和亮紫色內圈
+                            pygame.draw.circle(
+                                screen,
+                                SNIPER_BOSS_BULLET_COLOR,
+                                (int(bullet_screen_x), int(bullet_screen_y)),
+                                8,
+                            )
+                            pygame.draw.circle(
+                                screen,
+                                (255, 100, 255),  # 亮紫色內圈
+                                (int(bullet_screen_x), int(bullet_screen_y)),
+                                4,
+                            )
             else:  # 岩漿Boss
                 boss_text = font.render("🔥 LAVA BOSS", True, RED)
 

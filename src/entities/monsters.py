@@ -37,7 +37,19 @@ class Monster(GameObject):
     speed (float): 移動速度\n
     """
 
-    def __init__(self, x, y, width, height, color, monster_type, health, damage, speed):
+    def __init__(
+        self,
+        x,
+        y,
+        width,
+        height,
+        color,
+        monster_type,
+        health,
+        damage,
+        speed,
+        allow_platform_collision=True,
+    ):
         super().__init__(x, y, width, height, color)
 
         # 怪物基本屬性
@@ -47,6 +59,10 @@ class Monster(GameObject):
         self.damage = damage
         self.base_speed = speed
         self.current_speed = speed
+        self.allow_platform_collision = allow_platform_collision  # 是否受平台碰撞限制
+
+        # Boss相關屬性
+        self.is_boss = False  # 標記是否為Boss
 
         # 移動相關
         self.velocity_x = 0
@@ -327,7 +343,44 @@ class Monster(GameObject):
         \n
         參數:\n
         platforms (list): 平台列表\n
+        \n
+        Boss模式下可以無條件穿牆，但仍需要正確地站在地板上\n
         """
+        # 如果是Boss，穿牆但要檢查地板碰撞
+        if hasattr(self, "is_boss") and self.is_boss:
+            # Boss模式：可以穿牆，但需要檢查地板以確保腳在地板上
+            self.on_ground = False
+            boss_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+
+            # 只檢查從上方落到平台的碰撞（地板檢測）
+            for platform in platforms:
+                if boss_rect.colliderect(platform.rect):
+                    # 計算重疊距離
+                    overlap_top = boss_rect.bottom - platform.rect.top
+                    overlap_bottom = platform.rect.bottom - boss_rect.top
+
+                    # 如果Boss是從上方落到平台上（腳部碰撞）
+                    if (
+                        self.velocity_y > 0
+                        and overlap_top < overlap_bottom
+                        and overlap_top <= self.height // 2
+                    ):  # 只有下半身接觸平台才算站立
+                        # 確保Boss的腳正好站在平台表面
+                        self.y = platform.rect.top - self.height
+                        self.velocity_y = 0
+                        self.on_ground = True
+                        break
+
+            # 如果沒有找到合適的地板，檢查是否掉到螢幕底部
+            if not self.on_ground and self.y + self.height > SCREEN_HEIGHT - 50:
+                # 讓Boss站在螢幕底部地面上
+                self.y = SCREEN_HEIGHT - 50 - self.height
+                self.velocity_y = 0
+                self.on_ground = True
+
+            return
+
+        # 普通怪物的碰撞檢測
         self.on_ground = False
         monster_rect = pygame.Rect(self.x, self.y, self.width, self.height)
 
@@ -475,7 +528,7 @@ class LavaMonster(Monster):
     y (float): 初始 Y 座標\n
     """
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, allow_platform_collision=True):
         super().__init__(
             x,
             y,
@@ -486,6 +539,7 @@ class LavaMonster(Monster):
             LAVA_MONSTER_HEALTH,
             LAVA_MONSTER_DAMAGE,
             LAVA_MONSTER_SPEED,
+            allow_platform_collision,
         )
 
         # 岩漿怪特殊屬性
@@ -833,7 +887,7 @@ class WaterMonster(Monster):
     y (float): 初始 Y 座標\n
     """
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, allow_platform_collision=True):
         super().__init__(
             x,
             y,
@@ -844,6 +898,7 @@ class WaterMonster(Monster):
             WATER_MONSTER_HEALTH,
             WATER_MONSTER_DAMAGE,
             WATER_MONSTER_SPEED,
+            allow_platform_collision,
         )
 
         # 水怪特殊屬性
@@ -1166,21 +1221,20 @@ class WaterMonster(Monster):
 
 class SniperBoss(Monster):
     """
-    狙擊Boss - 超強戰術型Boss，擁有自動追蹤子彈、震波攻擊和躲避能力\n
+    狙擊Boss - 強大戰術型Boss，專精震波攻擊和躲避能力\n
     \n
     特殊能力：\n
-    1. 自動追蹤子彈：每5秒發射會自動追蹤玩家的子彈，隨時間消失\n
-    2. 震波攻擊：跳躍後落地產生震波，擊退並傷害玩家\n
-    3. 躲避AI：能檢測玩家子彈並進行閃避移動\n
-    4. 自動回血：每5秒回復1點生命值\n
-    5. 超高血量：比普通怪物高1/3倍\n
+    1. 精準震波攻擊：跳躍後落地產生朝向玩家的震波，擊退並傷害玩家\n
+    2. 躲避AI：能檢測玩家子彈並進行閃避移動\n
+    3. 自動回血：每5秒回復2點生命值\n
+    4. 超高血量：比普通怪物高很多倍\n
     \n
     參數:\n
     x (float): 初始 X 座標\n
     y (float): 初始 Y 座標\n
     """
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, allow_platform_collision=True):
         # 基於龍捲風怪的基礎屬性，但大幅增強
         super().__init__(
             x,
@@ -1192,6 +1246,7 @@ class SniperBoss(Monster):
             SNIPER_BOSS_HEALTH,
             SNIPER_BOSS_DAMAGE,
             SNIPER_BOSS_SPEED,
+            allow_platform_collision,
         )
 
         # Boss標記
@@ -1201,8 +1256,8 @@ class SniperBoss(Monster):
         self.detection_range = 300  # 大幅增加檢測範圍
         self.attack_range = 250  # 大幅增加攻擊範圍
 
-        # 自動追蹤子彈系統
-        self.tracking_bullet_cooldown = 2.0  # 每2秒發射一次追蹤子彈（提高頻率）
+        # 直線子彈系統
+        self.tracking_bullet_cooldown = 2.0  # 每2秒發射一次直線子彈（提高頻率）
         self.last_tracking_bullet_time = 0
         self.tracking_bullets = []
 
@@ -1229,7 +1284,7 @@ class SniperBoss(Monster):
         # 載入狙擊Boss圖片
         self.load_sniper_images()
 
-        print(f"🎯 狙擊Boss已生成！具備追蹤子彈、震波攻擊和躲避能力！")
+        print(f"🎯 狙擊Boss已生成！具備精準震波攻擊和躲避能力！")
 
     def load_sniper_images(self):
         """
@@ -1277,14 +1332,14 @@ class SniperBoss(Monster):
 
     def create_tracking_bullet(self, target_x, target_y):
         """
-        創建自動追蹤子彈\n
+        創建直線子彈（不再追蹤）\n
         \n
         參數:\n
         target_x (float): 目標 X 座標\n
         target_y (float): 目標 Y 座標\n
         \n
         回傳:\n
-        dict or None: 追蹤子彈資訊\n
+        dict or None: 直線子彈資訊\n
         """
         current_time = time.time()
         if (
@@ -1297,29 +1352,40 @@ class SniperBoss(Monster):
         start_x = self.x + self.width // 2
         start_y = self.y + self.height // 2
 
-        tracking_bullet = {
+        # 計算發射方向（發射時鎖定方向，不再追蹤）
+        dx = target_x - start_x
+        dy = target_y - start_y
+        distance = math.sqrt(dx**2 + dy**2)
+
+        if distance > 0:
+            direction_x = dx / distance
+            direction_y = dy / distance
+        else:
+            direction_x = 1
+            direction_y = 0
+
+        straight_bullet = {
             "x": start_x,
             "y": start_y,
-            "target_x": target_x,  # 追蹤目標座標
-            "target_y": target_y,
-            "speed": 24,  # 追蹤子彈速度（原本8 * 3 = 24）
+            "velocity_x": direction_x * 24,  # 設置固定速度
+            "velocity_y": direction_y * 24,
+            "speed": 24,  # 子彈速度（原本8 * 3 = 24）
             "damage": self.damage,
-            "lifetime": 35.0,  # 35秒後消失（原本7 * 5 = 35）
+            "lifetime": 10.0,  # 10秒後消失（縮短生存時間）
             "created_time": current_time,
-            "tracking_strength": 0.1,  # 追蹤強度，控制轉彎靈敏度
         }
 
-        self.tracking_bullets.append(tracking_bullet)
+        self.tracking_bullets.append(straight_bullet)
         self.last_tracking_bullet_time = current_time
-        print(f"🎯 狙擊Boss發射追蹤子彈！速度強化三倍，持續時間五倍！")
-        return tracking_bullet
+        print(f"🎯 狙擊Boss發射直線子彈！不再追蹤玩家")
+        return straight_bullet
 
     def update_tracking_bullets(self, player):
         """
-        更新所有追蹤子彈的狀態\n
+        更新所有直線子彈的狀態（不再追蹤）\n
         \n
         參數:\n
-        player (Player): 玩家物件\n
+        player (Player): 玩家物件（保留參數以保持介面相容性）\n
         """
         current_time = time.time()
         active_bullets = []
@@ -1329,23 +1395,9 @@ class SniperBoss(Monster):
             if current_time - bullet["created_time"] > bullet["lifetime"]:
                 continue
 
-            # 更新追蹤目標（玩家位置）
-            bullet["target_x"] = player.x + player.width // 2
-            bullet["target_y"] = player.y + player.height // 2
-
-            # 計算朝向目標的方向
-            dx = bullet["target_x"] - bullet["x"]
-            dy = bullet["target_y"] - bullet["y"]
-            distance = math.sqrt(dx**2 + dy**2)
-
-            if distance > 0:
-                # 計算追蹤移動
-                direction_x = dx / distance
-                direction_y = dy / distance
-
-                # 移動子彈朝向目標
-                bullet["x"] += direction_x * bullet["speed"]
-                bullet["y"] += direction_y * bullet["speed"]
+            # 子彈直線移動，不再追蹤玩家
+            bullet["x"] += bullet["velocity_x"]
+            bullet["y"] += bullet["velocity_y"]
 
             # 檢查是否超出螢幕邊界
             if 0 <= bullet["x"] <= SCREEN_WIDTH and 0 <= bullet["y"] <= SCREEN_HEIGHT:
@@ -1355,13 +1407,13 @@ class SniperBoss(Monster):
 
     def check_tracking_bullet_collision(self, player):
         """
-        檢查追蹤子彈與玩家的碰撞\n
+        檢查直線子彈與玩家的碰撞\n
         \n
         參數:\n
         player (Player): 玩家物件\n
         \n
         回傳:\n
-        bool: True 表示有追蹤子彈擊中玩家\n
+        bool: True 表示有直線子彈擊中玩家\n
         """
         bullets_to_remove = []
         hit = False
@@ -1370,13 +1422,13 @@ class SniperBoss(Monster):
             bullet_rect = pygame.Rect(bullet["x"] - 8, bullet["y"] - 8, 16, 16)
 
             if bullet_rect.colliderect(player.rect):
-                # 追蹤子彈擊中玩家
+                # 直線子彈擊中玩家
                 player.take_damage(bullet["damage"])
                 bullets_to_remove.append(i)
                 hit = True
-                print(f"🎯 追蹤子彈擊中玩家！造成 {bullet['damage']} 點傷害")
+                print(f"🎯 直線子彈擊中玩家！造成 {bullet['damage']} 點傷害")
 
-        # 移除擊中的追蹤子彈
+        # 移除擊中的直線子彈
         for i in reversed(bullets_to_remove):
             del self.tracking_bullets[i]
 
@@ -1397,8 +1449,10 @@ class SniperBoss(Monster):
             return False
 
         # 計算與玩家的距離
-        dx = player.x - self.x
-        dy = player.y - self.y
+        dx = (
+            player.x + player.width // 2 - (self.x + self.width // 2)
+        )  # 計算到玩家中心的距離
+        dy = player.y + player.height // 2 - (self.y + self.height // 2)
         distance = math.sqrt(dx**2 + dy**2)
 
         # 只在合適距離內發動震波攻擊（調整距離範圍）
@@ -1411,21 +1465,38 @@ class SniperBoss(Monster):
             self.velocity_y = -25  # 超強跳躍力
 
             self.last_shockwave_time = current_time
-            print(f"💥 狙擊Boss準備震波攻擊！")
+            print(f"💥 狙擊Boss準備震波攻擊！目標玩家中心位置")
             return True
 
         return False
 
-    def create_shockwave(self):
+    def create_shockwave(self, player=None):
         """
-        在Boss落地位置創建震波\n
+        在Boss落地位置創建震波，如果提供玩家位置則朝向玩家中心\n
+        \n
+        參數:\n
+        player (Player): 玩家物件，用於計算震波中心位置\n
         \n
         回傳:\n
         dict: 震波資訊\n
         """
+        # 如果有玩家位置，震波中心朝向玩家和Boss的中點
+        if player:
+            player_center_x = player.x + player.width // 2
+            player_center_y = player.y + player.height // 2
+            boss_center_x = self.x + self.width // 2
+            boss_center_y = self.y + self.height // 2
+
+            # 震波中心設在Boss和玩家之間，更準確地朝向玩家
+            shockwave_x = boss_center_x + (player_center_x - boss_center_x) * 0.3
+            shockwave_y = self.y + self.height  # 仍在Boss腳下
+        else:
+            shockwave_x = self.x + self.width // 2
+            shockwave_y = self.y + self.height
+
         shockwave = {
-            "x": self.x + self.width // 2,  # 震波中心
-            "y": self.y + self.height,  # 在Boss腳下
+            "x": shockwave_x,  # 震波中心朝向玩家
+            "y": shockwave_y,  # 在Boss腳下
             "radius": 0,  # 初始半徑
             "max_radius": 450,  # 最大擴散半徑（原本150 * 3 = 450）
             "expansion_speed": 8,  # 擴散速度
@@ -1437,9 +1508,7 @@ class SniperBoss(Monster):
         }
 
         self.shockwaves.append(shockwave)
-        print(
-            f"💥 震波產生！半徑將擴散至 {shockwave['max_radius']} 像素（強化三倍範圍）"
-        )
+        print(f"💥 震波產生！中心朝向玩家，半徑將擴散至 {shockwave['max_radius']} 像素")
         return shockwave
 
     def update_shockwaves(self, player):
@@ -1586,9 +1655,12 @@ class SniperBoss(Monster):
 
             self.last_heal_time = current_time
 
-    def update_jump_state(self):
+    def update_jump_state(self, player=None):
         """
         更新跳躍震波攻擊狀態\n
+        \n
+        參數:\n
+        player (Player): 玩家物件，用於震波朝向計算\n
         """
         if not self.is_jumping:
             return
@@ -1602,8 +1674,8 @@ class SniperBoss(Monster):
             # 檢查是否落地
             if self.on_ground and self.velocity_y >= 0:
                 self.jump_phase = "landing"
-                # 產生震波
-                self.create_shockwave()
+                # 產生震波，朝向玩家
+                self.create_shockwave(player)
 
         elif self.jump_phase == "landing":
             # 震波攻擊完成
@@ -1612,7 +1684,7 @@ class SniperBoss(Monster):
 
     def attack_player(self, player):
         """
-        狙擊Boss的綜合攻擊方式\n
+        狙擊Boss的綜合攻擊方式（子彈改為直線射擊）\n
         \n
         參數:\n
         player (Player): 目標玩家\n
@@ -1620,7 +1692,7 @@ class SniperBoss(Monster):
         回傳:\n
         bool: True 表示攻擊成功\n
         """
-        # 優先使用追蹤子彈
+        # 優先使用直線子彈
         if self.create_tracking_bullet(player.x, player.y):
             return True
 
@@ -1652,17 +1724,11 @@ class SniperBoss(Monster):
 
         # 更積極的攻擊邏輯
         if player_detected:
-            # 優先考慮追蹤子彈攻擊
+            # 不再使用子彈攻擊，專注於震波攻擊
             current_time = time.time()
-            if (
-                current_time - self.last_tracking_bullet_time
-                >= self.tracking_bullet_cooldown
-            ):
-                self.ai_state = "attack"
-                self.create_tracking_bullet(player.x, player.y)
 
             # 如果距離合適，考慮震波攻擊
-            elif (
+            if (
                 distance <= 300
                 and current_time - self.last_shockwave_time >= self.shockwave_cooldown
             ):
@@ -1705,17 +1771,13 @@ class SniperBoss(Monster):
         super().update(player, platforms, level_width)
 
         if self.is_alive:
-            # 更新追蹤子彈
-            self.update_tracking_bullets(player)
-
-            # 檢查追蹤子彈碰撞
-            self.check_tracking_bullet_collision(player)
+            # 不再更新子彈相關功能
 
             # 更新震波
             self.update_shockwaves(player)
 
-            # 更新跳躍狀態
-            self.update_jump_state()
+            # 更新跳躍狀態，傳遞玩家位置
+            self.update_jump_state(player)
 
             # 更新躲避狀態
             self.update_dodge_state()
@@ -1779,10 +1841,6 @@ class SniperBoss(Monster):
             boss_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
             pygame.draw.rect(screen, current_color, boss_rect)
 
-        # 繪製Boss標記邊框
-        boss_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
-        pygame.draw.rect(screen, YELLOW, boss_rect, 4)
-
         # 繪製生命值條（更大的生命值條）
         bar_width = self.width + 20
         bar_height = 8
@@ -1807,22 +1865,7 @@ class SniperBoss(Monster):
         text_rect.bottom = bar_y - 5
         screen.blit(boss_text, text_rect)
 
-        # 繪製追蹤子彈
-        for bullet in self.tracking_bullets:
-            bullet_screen_x = bullet["x"] - camera_x
-            bullet_screen_y = bullet["y"] - camera_y
-            # 只繪製在螢幕範圍內的追蹤子彈
-            if (
-                -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
-                and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
-            ):
-                # 繪製追蹤子彈：紫色外圈和白色內圈
-                pygame.draw.circle(
-                    screen, PURPLE, (int(bullet_screen_x), int(bullet_screen_y)), 8
-                )
-                pygame.draw.circle(
-                    screen, WHITE, (int(bullet_screen_x), int(bullet_screen_y)), 4
-                )
+        # 不再繪製子彈
 
         # 繪製震波
         for shockwave in self.shockwaves:
@@ -1866,7 +1909,7 @@ class TornadoMonster(Monster):
     y (float): 初始 Y 座標\n
     """
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, allow_platform_collision=True):
         super().__init__(
             x,
             y,
@@ -1877,6 +1920,7 @@ class TornadoMonster(Monster):
             TORNADO_MONSTER_HEALTH,
             TORNADO_MONSTER_DAMAGE,
             TORNADO_MONSTER_SPEED,
+            allow_platform_collision,
         )
 
         # 龍捲風怪特殊屬性

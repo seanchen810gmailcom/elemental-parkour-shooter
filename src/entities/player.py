@@ -44,7 +44,7 @@ class Player(GameObject):
         self.velocity_x = 0
         self.velocity_y = 0
         self.on_ground = False
-        self.can_double_jump = True  # 是否還能二段跳
+        self.remaining_jumps = 2  # 剩餘空中跳躍次數（二段跳和三段跳）
         self.is_wall_sliding = False  # 是否在滑牆
         self.wall_direction = 0  # 接觸的牆壁方向 (-1: 左牆, 1: 右牆, 0: 無牆)
 
@@ -143,6 +143,11 @@ class Player(GameObject):
         self.shotgun_left_image = None  # 專門用於往左射擊的圖片（180度旋轉）
         self.load_shotgun_image()
 
+        # 衝鋒槍圖片載入
+        self.assault_rifle_image = None
+        self.assault_rifle_reverse_image = None
+        self.load_assault_rifle_image()
+
         # 必殺技系統
         self.last_ultimate_time = 0  # 上次使用必殺技的時間
         self.ultimate_cooldown = 20.0  # 必殺技冷卻時間：20秒
@@ -211,32 +216,32 @@ class Player(GameObject):
 
     def jump(self):
         """
-        跳躍動作 - 包含一般跳躍、二段跳和爬牆跳\n
+        跳躍動作 - 包含一般跳躍、二段跳、三段跳和爬牆跳\n
         \n
         跳躍邏輯：\n
         1. 在地面上：正常跳躍\n
-        2. 在空中且有二段跳：二段跳躍\n
+        2. 在空中且還有剩餘跳躍次數：二段跳或三段跳\n
         3. 在牆邊滑行：爬牆跳躍（向反方向推開）\n
         \n
-        每種跳躍有不同的力道和水平推力。\n
+        每種跳躍都有相同的高度，確保三段跳每次跳躍力道一致。\n
         """
         if self.on_ground:
             # 一般跳躍：在地面上時的跳躍
             self.velocity_y = PLAYER_JUMP_STRENGTH
             self.on_ground = False
-            self.can_double_jump = True  # 跳躍後重新獲得二段跳能力
+            self.remaining_jumps = 2  # 跳躍後重新獲得2次空中跳躍能力（二段跳和三段跳）
 
-        elif self.can_double_jump:
-            # 二段跳：在空中時的額外跳躍
-            self.velocity_y = DOUBLE_JUMP_STRENGTH
-            self.can_double_jump = False  # 用完二段跳
+        elif self.remaining_jumps > 0:
+            # 空中跳躍：二段跳或三段跳，使用相同的跳躍力道
+            self.velocity_y = PLAYER_JUMP_STRENGTH  # 與一般跳躍相同的高度
+            self.remaining_jumps -= 1  # 減少一次空中跳躍次數
 
         elif self.is_wall_sliding:
             # 爬牆跳：從牆面推開並向上跳躍
             self.velocity_y = WALL_JUMP_STRENGTH
             self.velocity_x = -self.wall_direction * WALL_JUMP_PUSH  # 向相反方向推開
             self.is_wall_sliding = False
-            self.can_double_jump = True  # 爬牆跳後重新獲得二段跳
+            self.remaining_jumps = 2  # 爬牆跳後重新獲得2次空中跳躍能力
 
     def shoot(self, camera_x=0, camera_y=0):
         """
@@ -783,7 +788,7 @@ class Player(GameObject):
                     self.y = platform.rect.top - self.height
                     self.velocity_y = 0
                     self.on_ground = True
-                    self.can_double_jump = True  # 落地後重新獲得二段跳
+                    self.remaining_jumps = 2  # 落地後重新獲得2次空中跳躍能力
 
                 elif min_overlap == overlap_bottom and self.velocity_y < 0:
                     # 從下方撞到平台（撞天花板）
@@ -1007,6 +1012,10 @@ class Player(GameObject):
         if self.current_weapon == "machine_gun":
             self.draw_machine_gun(screen, camera_x, camera_y)
 
+        # 繪製衝鋒槍（當使用衝鋒槍時）
+        if self.current_weapon == "assault_rifle":
+            self.draw_assault_rifle(screen, camera_x, camera_y)
+
         # 繪製散彈槍（當使用散彈槍時）
         if self.current_weapon == "shotgun":
             self.draw_shotgun(screen, camera_x, camera_y)
@@ -1120,7 +1129,7 @@ class Player(GameObject):
             self.shotgun_reverse_image = pygame.transform.flip(
                 self.shotgun_image, True, False
             )  # True=水平翻轉, False=不垂直翻轉
-            
+
             # 為往左射擊生成 180 度旋轉的圖片（解決上下左右都顛倒的問題）
             self.shotgun_left_image = pygame.transform.flip(
                 self.shotgun_image, True, True
@@ -1178,8 +1187,50 @@ class Player(GameObject):
             # 反向圖片載入失敗，將使用預設顯示
             print(f"機關槍反向圖片載入失敗: {e}")
             self.machine_gun_reverse_image = None
-            print(f"機關槍反向圖片載入失敗: {e}")
-            self.machine_gun_reverse_image = None
+
+    def load_assault_rifle_image(self):
+        """
+        載入衝鋒槍圖片 - 處理正向和反向圖片載入和縮放\n
+        \n
+        功能:\n
+        1. 嘗試載入指定的衝鋒槍正向圖片檔案（往右射擊）\n
+        2. 嘗試載入指定的衝鋒槍反向圖片檔案（往左射擊）\n
+        3. 將圖片縮放到適當大小\n
+        4. 如果載入失敗，使用預設的矩形顯示\n
+        \n
+        圖片處理:\n
+        - 支援 PNG 格式的透明背景圖片\n
+        - 自動縮放到 ASSAULT_RIFLE_IMAGE_SIZE 尺寸\n
+        """
+        try:
+            # 載入衝鋒槍正向圖片（往右射擊）
+            self.assault_rifle_image = pygame.image.load(
+                ASSAULT_RIFLE_IMAGE_PATH
+            ).convert_alpha()
+            # 縮放到指定大小
+            self.assault_rifle_image = pygame.transform.scale(
+                self.assault_rifle_image, ASSAULT_RIFLE_IMAGE_SIZE
+            )
+            print(f"成功載入衝鋒槍正向圖片: {ASSAULT_RIFLE_IMAGE_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            # 圖片載入失敗，將使用預設矩形顯示
+            print(f"衝鋒槍正向圖片載入失敗: {e}")
+            self.assault_rifle_image = None
+
+        try:
+            # 載入衝鋒槍反向圖片（往左射擊）
+            self.assault_rifle_reverse_image = pygame.image.load(
+                ASSAULT_RIFLE_REVERSE_IMAGE_PATH
+            ).convert_alpha()
+            # 縮放到指定大小
+            self.assault_rifle_reverse_image = pygame.transform.scale(
+                self.assault_rifle_reverse_image, ASSAULT_RIFLE_IMAGE_SIZE
+            )
+            print(f"成功載入衝鋒槍反向圖片: {ASSAULT_RIFLE_REVERSE_IMAGE_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            # 反向圖片載入失敗，將使用預設顯示
+            print(f"衝鋒槍反向圖片載入失敗: {e}")
+            self.assault_rifle_reverse_image = None
 
     def draw_machine_gun(self, screen, camera_x=0, camera_y=0):
         """
@@ -1481,6 +1532,110 @@ class Player(GameObject):
                 (player_center_x - camera_x, player_center_y - camera_y),
                 (int(end_x), int(end_y)),
                 5,  # 散彈槍粗細介於機關槍和狙擊槍之間
+            )
+
+    def draw_assault_rifle(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製衝鋒槍 - 根據瞄準方向旋轉衝鋒槍圖片，支援左右朝向圖片\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 要繪製到的螢幕表面\n
+        camera_x (int): 攝影機 x 偏移\n
+        camera_y (int): 攝影機 y 偏移\n
+        \n
+        繪製邏輯:\n
+        1. 只有當使用衝鋒槍且圖片載入成功時才繪製\n
+        2. 計算瞄準角度並旋轉槍的圖片\n
+        3. 根據瞄準方向自動選擇正向或反向圖片\n
+        4. 槍的中心位置跟隨玩家\n
+        5. 圖片載入失敗時繪製簡單的矩形代替\n
+        """
+        if self.assault_rifle_image is not None:
+            # 獲取滑鼠位置來決定槍的角度
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            world_mouse_x = mouse_x + camera_x
+            world_mouse_y = mouse_y + camera_y
+
+            # 計算玩家中心位置（世界座標）
+            player_center_x = self.x + self.width // 2
+            player_center_y = self.y + self.height // 2
+
+            # 計算瞄準角度
+            direction_x = world_mouse_x - player_center_x
+            direction_y = world_mouse_y - player_center_y
+
+            # 計算角度（弧度轉角度）
+            angle = math.atan2(direction_y, direction_x)
+            angle_degrees = math.degrees(angle) + ASSAULT_RIFLE_ROTATION_OFFSET
+
+            # 根據角度選擇使用哪個圖片
+            # 修正圖片方向：往右打使用B&T_APC_9_K_side_profile.png，往左打使用B&T_APC_9_K_side_profile拷貝.png
+            if angle_degrees > 90 or angle_degrees < -90:
+                # 往左射擊時使用正向圖片（B&T_APC_9_K_side_profile.png）
+                if self.assault_rifle_image is not None:
+                    rifle_image = self.assault_rifle_image
+                    # 調整角度使圖片正確朝向
+                    angle_degrees = (
+                        angle_degrees - 180
+                        if angle_degrees > 0
+                        else angle_degrees + 180
+                    )
+                else:
+                    # 沒有圖片時，使用翻轉的備用圖片
+                    rifle_image = pygame.transform.flip(
+                        self.assault_rifle_reverse_image, True, False
+                    )
+                    angle_degrees = (
+                        angle_degrees - 180
+                        if angle_degrees > 0
+                        else angle_degrees + 180
+                    )
+            else:
+                # 往右射擊時使用反向圖片（B&T_APC_9_K_side_profile拷貝.png）
+                rifle_image = self.assault_rifle_reverse_image
+
+            # 旋轉衝鋒槍圖片
+            rotated_rifle = pygame.transform.rotate(rifle_image, -angle_degrees)
+
+            # 計算旋轉後圖片的新中心位置（螢幕座標）
+            rifle_rect = rotated_rifle.get_rect()
+            rifle_rect.center = (player_center_x - camera_x, player_center_y - camera_y)
+
+            # 繪製旋轉後的衝鋒槍
+            screen.blit(rotated_rifle, rifle_rect)
+        else:
+            # 圖片載入失敗，繪製簡單的槍械矩形代替
+            # 計算槍的位置和角度
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            world_mouse_x = mouse_x + camera_x
+            world_mouse_y = mouse_y + camera_y
+
+            player_center_x = self.x + self.width // 2
+            player_center_y = self.y + self.height // 2
+
+            # 計算方向
+            direction_x = world_mouse_x - player_center_x
+            direction_y = world_mouse_y - player_center_y
+            distance = math.sqrt(direction_x**2 + direction_y**2)
+
+            if distance > 0:
+                direction_x /= distance
+                direction_y /= distance
+            else:
+                direction_x = self.facing_direction
+                direction_y = 0
+
+            # 繪製簡單的槍械線段（從玩家中心向滑鼠方向）
+            rifle_length = 33  # 衝鋒槍長度
+            end_x = player_center_x - camera_x + direction_x * rifle_length
+            end_y = player_center_y - camera_y + direction_y * rifle_length
+
+            pygame.draw.line(
+                screen,
+                ASSAULT_RIFLE_COLOR,
+                (player_center_x - camera_x, player_center_y - camera_y),
+                (int(end_x), int(end_y)),
+                4,  # 衝鋒槍粗細
             )
 
     def draw_crosshair(self, screen, camera_x=0, camera_y=0):
