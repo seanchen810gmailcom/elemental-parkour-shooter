@@ -336,8 +336,8 @@ class ElementalParkourShooter:
             # 更新攝影機
             self.update_camera()
 
-            # 更新雲朵系統
-            self.cloud_system.update(dt, self.camera_x)
+            # 更新雲朵系統 - 傳遞玩家座標讓雲朵跟隨
+            self.cloud_system.update(dt, self.player.x, self.player.y)
 
             # 小地圖系統已移除
 
@@ -719,11 +719,46 @@ class ElementalParkourShooter:
         if self.game_state == "playing":
             # 先清空螢幕並繪製天空背景
             self.screen.fill(SKY_COLOR)
+            print(f"🎨 螢幕已清空，填入天空顏色: {SKY_COLOR}")
+
+            # 攝影機與螢幕資訊
+            print(f"📷 攝影機位置: ({self.camera_x:.1f}, {self.camera_y:.1f})")
+            print(
+                f"📱 螢幕可視範圍: X({self.camera_x:.1f} ~ {self.camera_x + SCREEN_WIDTH:.1f}), Y({self.camera_y:.1f} ~ {self.camera_y + SCREEN_HEIGHT:.1f})"
+            )
+            print(f"� 玩家位置: ({self.player.x:.1f}, {self.player.y:.1f})")
+
+            # 繪製遠山背景（在地平線上）- 使用標準 Pygame 座標系統
+            horizon_y = 500  # 固定地平線在 Y=500，玩家在 Y=600
+            print(f"🏔️ 山峰除錯：地平線Y={horizon_y}, 攝影機X={self.camera_x:.1f}")
+
+            for i in range(5):
+                # 簡化座標：背景山峰幾乎不移動
+                mountain_x = i * (SCREEN_WIDTH // 4) - (
+                    self.camera_x * 0.05
+                )  # 極輕微視差
+                mountain_height = 50 + i * 20
+                mountain_color = (64 + i * 10, 64 + i * 10, 80 + i * 10)  # 漸層灰藍色
+
+                # 繪製三角形山峰
+                mountain_points = [
+                    (mountain_x - 100, horizon_y),
+                    (mountain_x, horizon_y - mountain_height),
+                    (mountain_x + 100, horizon_y),
+                ]
+
+                print(
+                    f"🏔️ 山峰{i}: 螢幕X={mountain_x:.1f}, 高度={mountain_height}, 頂點Y={horizon_y - mountain_height}, 顏色{mountain_color}"
+                )
+                pygame.draw.polygon(self.screen, mountain_color, mountain_points)
 
             # 繪製地面背景（在螢幕下方）
             ground_height = SCREEN_HEIGHT // 4  # 地面佔螢幕下方1/4
             ground_rect = pygame.Rect(
                 0, SCREEN_HEIGHT - ground_height, SCREEN_WIDTH, ground_height
+            )
+            print(
+                f"🌍 地面背景: 矩形位置({ground_rect.x}, {ground_rect.y}), 大小({ground_rect.width}x{ground_rect.height})"
             )
             pygame.draw.rect(self.screen, (101, 67, 33), ground_rect)  # 深棕色地面
 
@@ -735,46 +770,69 @@ class ElementalParkourShooter:
                 SCREEN_WIDTH,
                 grass_height,
             )
+            print(
+                f"🌱 草地表面: 矩形位置({grass_rect.x}, {grass_rect.y}), 大小({grass_rect.width}x{grass_rect.height})"
+            )
             pygame.draw.rect(self.screen, (34, 139, 34), grass_rect)  # 草綠色
 
-            # 繪製遠山背景（在地平線上）
-            horizon_y = SCREEN_HEIGHT - ground_height - grass_height
-            for i in range(5):
-                mountain_x = i * (SCREEN_WIDTH // 4) - (self.camera_x * 0.1)  # 視差效果
-                mountain_height = 50 + i * 20
-                mountain_color = (64 + i * 10, 64 + i * 10, 80 + i * 10)  # 漸層灰藍色
-
-                # 繪製三角形山峰
-                mountain_points = [
-                    (mountain_x - 100, horizon_y),
-                    (mountain_x, horizon_y - mountain_height),
-                    (mountain_x + 100, horizon_y),
-                ]
-                pygame.draw.polygon(self.screen, mountain_color, mountain_points)
-
-            # 繪製雲朵背景（在所有其他物件之前）
-            self.cloud_system.draw(self.screen, self.camera_x, self.camera_y)
-
             # 繪製關卡場景（包含背景、平台和陷阱）
+            print(f"🏗️ 開始繪製關卡系統")
             self.level_manager.draw(self.screen, self.camera_x, self.camera_y)
 
             # 繪製怪物（需要攝影機偏移）
+            monster_count = len(self.monster_manager.monsters)
+            boss_exists = self.monster_manager.boss is not None
+            print(f"👹 怪物系統: 普通怪物{monster_count}隻, Boss存在:{boss_exists}")
+            if monster_count > 0:
+                for i, monster in enumerate(
+                    self.monster_manager.monsters[:3]
+                ):  # 顯示前3隻怪物
+                    screen_x = monster.x - self.camera_x
+                    screen_y = monster.y - self.camera_y
+                    print(
+                        f"   怪物{i}: 世界座標({monster.x:.1f}, {monster.y:.1f}) -> 螢幕座標({screen_x:.1f}, {screen_y:.1f})"
+                    )
+            if boss_exists:
+                boss_screen_x = self.monster_manager.boss.x - self.camera_x
+                boss_screen_y = self.monster_manager.boss.y - self.camera_y
+                print(
+                    f"   Boss: 世界座標({self.monster_manager.boss.x:.1f}, {self.monster_manager.boss.y:.1f}) -> 螢幕座標({boss_screen_x:.1f}, {boss_screen_y:.1f})"
+                )
             self.monster_manager.draw(self.screen, self.camera_x, self.camera_y)
 
             # 繪製武器系統（子彈等）
+            bullet_count = len(self.weapon_manager.bullets)
+            print(f"🔫 武器系統: {bullet_count}發子彈")
+            if bullet_count > 0:
+                for i, bullet in enumerate(
+                    self.weapon_manager.bullets[:3]
+                ):  # 顯示前3發子彈
+                    bullet_screen_x = bullet.x - self.camera_x
+                    bullet_screen_y = bullet.y - self.camera_y
+                    print(
+                        f"   子彈{i}: 世界座標({bullet.x:.1f}, {bullet.y:.1f}) -> 螢幕座標({bullet_screen_x:.1f}, {bullet_screen_y:.1f})"
+                    )
             self.weapon_manager.draw(self.screen, self.camera_x, self.camera_y)
 
             # 繪製傷害數字
+            damage_count = len(self.damage_display.damage_numbers)
+            print(f"💥 傷害顯示: {damage_count}個傷害數字")
             self.damage_display.draw(self.screen, self.camera_x, self.camera_y)
 
             # 繪製玩家
             if self.player.is_alive:
+                player_screen_x = self.player.x - self.camera_x
+                player_screen_y = self.player.y - self.camera_y
+                print(
+                    f"👤 玩家: 世界座標({self.player.x:.1f}, {self.player.y:.1f}) -> 螢幕座標({player_screen_x:.1f}, {player_screen_y:.1f})"
+                )
                 self.player.draw(self.screen, self.camera_x, self.camera_y)
 
             # 繪製狙擊槍準心（在最上層）
             self.player.draw_crosshair(self.screen, self.camera_x, self.camera_y)
 
             # 繪製 UI 元素（固定在螢幕上，不受攝影機影響）
+            print(f"🎮 開始繪製UI元素")
             self.player.draw_health_bar(self.screen)
             self.player.draw_bullet_ui(self.screen)
             self.player.draw_ultimate_ui(self.screen)
@@ -784,7 +842,12 @@ class ElementalParkourShooter:
             score_text = score_font.render(f"分數: {self.score}", True, WHITE)
             score_rect = score_text.get_rect()
             score_rect.topright = (SCREEN_WIDTH - 20, 20)  # 恢復到右上角原始位置
+            print(
+                f"🏆 分數顯示: 位置({score_rect.x}, {score_rect.y}), 內容'分數: {self.score}'"
+            )
             self.screen.blit(score_text, score_rect)
+
+            print("=" * 80)  # 分隔線，方便觀察每一幀的除錯資訊
 
         elif self.game_state == "victory":
             # 繪製勝利畫面
@@ -908,6 +971,11 @@ class ElementalParkourShooter:
                 center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100)
             )
             self.screen.blit(quit_text, quit_rect)
+
+        # 最後繪製雲朵系統（最上層顯示）
+        if self.game_state == "playing":
+            print(f"🌤️ 最上層繪製雲朵系統")
+            self.cloud_system.draw(self.screen, self.camera_x, self.camera_y)
 
         # 更新整個螢幕顯示
         pygame.display.flip()

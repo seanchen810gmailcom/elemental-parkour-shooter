@@ -19,9 +19,10 @@ class Cloud:
     \n
     每個雲朵有自己的位置、大小、移動速度和外觀\n
     雲朵會持續緩慢移動，營造天空動態效果\n
+    使用 Cloud.png 圖片素材來顯示雲朵外觀\n
     """
 
-    def __init__(self, x, y, size, speed, layer=0):
+    def __init__(self, x, y, size, speed):
         """
         初始化雲朵物件\n
         \n
@@ -30,27 +31,145 @@ class Cloud:
         y (float): 雲朵初始 Y 位置，範圍任意\n
         size (float): 雲朵大小倍數，範圍 0.5-2.0\n
         speed (float): 雲朵移動速度，範圍 0.1-2.0\n
-        layer (int): 雲朵層次，0=背景層，1=前景層\n
         """
         self.x = x
         self.y = y
         self.size = size  # 雲朵大小倍數
         self.speed = speed  # 水平移動速度
-        self.layer = layer  # 層次，影響顏色深淺
 
-        # 雲朵基本尺寸
-        self.base_width = 80
-        self.base_height = 40
+        # 雲朵基本尺寸（基於配置）
+        self.base_width = CLOUD_IMAGE_BASE_SIZE[0]
+        self.base_height = CLOUD_IMAGE_BASE_SIZE[1]
         self.width = self.base_width * size
         self.height = self.base_height * size
 
-        # 根據層次設定顏色深淺
-        if layer == 0:
-            # 背景層 - 較淡的顏色
-            self.color = CLOUD_BACKGROUND_COLOR  # 半透明淺灰藍
+        # 載入雲朵圖片
+        self.image = self._load_cloud_image()
+
+        # 統一設定為完全不透明
+        self.alpha = 255
+
+    def _load_cloud_image(self):
+        """
+        載入雲朵圖片素材\n
+        \n
+        回傳:\n
+        pygame.Surface: 雲朵圖片表面，如果載入失敗則返回程式繪製的雲朵\n
+        """
+        try:
+            # 嘗試載入雲朵圖片
+            cloud_image = pygame.image.load(CLOUD_IMAGE_PATH).convert_alpha()
+            cloud_image = pygame.transform.scale(
+                cloud_image, (int(self.width), int(self.height))
+            )
+            return cloud_image
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"🌤️ 載入雲朵圖片失敗: {e}")
+            # 創建一個白色雲朵，完全不透明
+            cloud_surface = pygame.Surface(
+                (int(self.width), int(self.height)), pygame.SRCALPHA
+            )
+
+            # 使用純白色，完全不透明
+            cloud_color = (255, 255, 255, 255)  # 純白色，完全不透明
+
+            # 繪製雲朵形狀
+            center_x = int(self.width / 2)
+            center_y = int(self.height / 2)
+
+            # 繪製主要橢圓
+            pygame.draw.ellipse(
+                cloud_surface,
+                cloud_color,
+                (0, int(self.height * 0.3), int(self.width), int(self.height * 0.4)),
+            )
+
+            # 繪製左側圓形
+            pygame.draw.circle(
+                cloud_surface,
+                cloud_color,
+                (int(self.width * 0.25), center_y),
+                int(self.height * 0.3),
+            )
+
+            # 繪製右側圓形
+            pygame.draw.circle(
+                cloud_surface,
+                cloud_color,
+                (int(self.width * 0.75), center_y),
+                int(self.height * 0.25),
+            )
+
+            # 繪製頂部圓形
+            pygame.draw.circle(
+                cloud_surface,
+                cloud_color,
+                (center_x, int(self.height * 0.2)),
+                int(self.height * 0.2),
+            )
+
+            print(
+                f"🌤️ 使用統一白色雲朵圖案，大小: {int(self.width)}x{int(self.height)}, 顏色: {cloud_color}"
+            )
+            return cloud_surface
+
+    def _create_fallback_cloud(self):
+        """
+        創建備用雲朵圖案（當圖片載入失敗時使用）\n
+        \n
+        回傳:\n
+        pygame.Surface: 程式繪製的雲朵表面\n
+        """
+        # 創建雲朵表面
+        cloud_surface = pygame.Surface(
+            (int(self.width), int(self.height)), pygame.SRCALPHA
+        )
+
+        # 根據層次選擇顏色
+        if self.layer == 0:
+            base_color = CLOUD_BACKGROUND_COLOR[:3]  # 背景層顏色
         else:
-            # 前景層 - 較深的顏色
-            self.color = CLOUD_FOREGROUND_COLOR  # 半透明灰白
+            base_color = CLOUD_FOREGROUND_COLOR[:3]  # 前景層顏色
+
+        # 繪製雲朵形狀 - 由多個橢圓組成
+        self._draw_cloud_shape_on_surface(cloud_surface, base_color)
+
+        return cloud_surface
+
+    def _draw_cloud_shape_on_surface(self, surface, color):
+        """
+        在表面上繪製雲朵形狀 - 使用多個橢圓組合\n
+        \n
+        參數:\n
+        surface (pygame.Surface): 雲朵的繪製表面\n
+        color (tuple): 雲朵顏色 (R, G, B)\n
+        """
+        width, height = surface.get_size()
+
+        # 繪製主體橢圓
+        main_width = int(width * 0.8)
+        main_height = int(height * 0.6)
+        main_x = int(width * 0.1)
+        main_y = int(height * 0.2)
+        pygame.draw.ellipse(surface, color, (main_x, main_y, main_width, main_height))
+
+        # 繪製左側小圓
+        left_radius = int(height * 0.3)
+        left_x = int(width * 0.15)
+        left_y = int(height * 0.3)
+        pygame.draw.circle(surface, color, (left_x, left_y), left_radius)
+
+        # 繪製右側小圓
+        right_radius = int(height * 0.25)
+        right_x = int(width * 0.75)
+        right_y = int(height * 0.4)
+        pygame.draw.circle(surface, color, (right_x, right_y), right_radius)
+
+        # 繪製頂部小圓
+        top_radius = int(height * 0.2)
+        top_x = int(width * 0.4)
+        top_y = int(height * 0.15)
+        pygame.draw.circle(surface, color, (top_x, top_y), top_radius)
 
     def update(self, dt):
         """
@@ -62,86 +181,54 @@ class Cloud:
         # 雲朵緩慢向右飄移
         self.x += self.speed * dt * 60  # 轉換為每秒像素數
 
+    def update_size(self, new_size):
+        """
+        更新雲朵大小並重新載入圖片\n
+        \n
+        參數:\n
+        new_size (float): 新的雲朵大小倍數\n
+        """
+        self.size = new_size
+        self.width = self.base_width * new_size
+        self.height = self.base_height * new_size
+        # 重新載入並縮放圖片
+        self.image = self._load_cloud_image()
+
     def draw(self, screen, camera_x=0, camera_y=0):
         """
-        繪製雲朵 - 使用橢圓形狀組合成雲朵外觀\n
+        繪製雲朵 - 使用相對座標跟隨玩家\n
         \n
         參數:\n
         screen (pygame.Surface): 繪製表面\n
         camera_x (float): 攝影機 X 偏移\n
         camera_y (float): 攝影機 Y 偏移\n
         """
-        # 計算螢幕座標（雲朵受攝影機影響較小）
-        parallax_factor = 0.3 if self.layer == 0 else 0.6  # 背景層移動更慢
-        screen_x = self.x - (camera_x * parallax_factor)
-        screen_y = self.y - (camera_y * parallax_factor)
+        # 計算雲朵在螢幕上的相對位置
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
 
-        # 如果雲朵不在螢幕範圍內就不繪製
-        if screen_x + self.width < -50 or screen_x > SCREEN_WIDTH + 50:
+        # 檢查是否在螢幕範圍內（允許稍微超出螢幕邊界）
+        if (
+            screen_x + self.width < -100
+            or screen_x > SCREEN_WIDTH + 100
+            or screen_y + self.height < -100
+            or screen_y > SCREEN_HEIGHT + 100
+        ):
             return
-        if screen_y + self.height < -50 or screen_y > SCREEN_HEIGHT + 50:
-            return
-
-        # 創建半透明表面
-        cloud_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-
-        # 繪製雲朵形狀 - 由多個橢圓組成
-        self._draw_cloud_shape(cloud_surface)
 
         # 將雲朵繪製到螢幕上
-        screen.blit(cloud_surface, (screen_x, screen_y))
-
-    def _draw_cloud_shape(self, surface):
-        """
-        繪製雲朵形狀 - 使用多個橢圓組合\n
-        \n
-        參數:\n
-        surface (pygame.Surface): 雲朵的繪製表面\n
-        """
-        # 主要的雲朵顏色（去掉透明度用於橢圓繪製）
-        base_color = self.color[:3]
-
-        # 繪製主體橢圓
-        main_width = int(self.width * 0.8)
-        main_height = int(self.height * 0.6)
-        main_x = int(self.width * 0.1)
-        main_y = int(self.height * 0.2)
-
-        pygame.draw.ellipse(
-            surface, base_color, (main_x, main_y, main_width, main_height)
-        )
-
-        # 繪製左側小圓
-        left_radius = int(self.height * 0.3)
-        left_x = int(self.width * 0.15)
-        left_y = int(self.height * 0.3)
-
-        pygame.draw.circle(surface, base_color, (left_x, left_y), left_radius)
-
-        # 繪製右側小圓
-        right_radius = int(self.height * 0.25)
-        right_x = int(self.width * 0.75)
-        right_y = int(self.height * 0.4)
-
-        pygame.draw.circle(surface, base_color, (right_x, right_y), right_radius)
-
-        # 繪製頂部小圓
-        top_radius = int(self.height * 0.2)
-        top_x = int(self.width * 0.4)
-        top_y = int(self.height * 0.15)
-
-        pygame.draw.circle(surface, base_color, (top_x, top_y), top_radius)
+        screen.blit(self.image, (screen_x, screen_y))
 
 
 class CloudSystem:
     """
-    雲朵系統管理器 - 管理天空中所有雲朵的生成、更新和顯示\n
+    雲朵系統管理器 - 管理天空中的背景雲朵\n
     \n
     負責：\n
-    1. 生成適量的雲朵分布在天空中\n
-    2. 管理雲朵的移動和更新\n
-    3. 處理雲朵的循環（移出螢幕後重新生成）\n
-    4. 提供不同層次的雲朵營造景深效果\n
+    1. 生成多朵雲朵分布在天空背景中\n
+    2. 雲朵固定在背景位置，不跟隨玩家移動\n
+    3. 使用純白色無透明度顯示\n
+    4. 營造靜態天空背景效果\n
     """
 
     def __init__(self, level_width, level_height):
@@ -158,86 +245,58 @@ class CloudSystem:
 
         # 雲朵生成設定
         self.cloud_count = CLOUD_COUNT  # 總雲朵數量
-        self.min_cloud_speed = CLOUD_MIN_SPEED  # 最小移動速度
-        self.max_cloud_speed = CLOUD_MAX_SPEED  # 最大移動速度
-        self.cloud_respawn_distance = CLOUD_RESPAWN_DISTANCE  # 雲朵重生距離
 
-        # 初始化雲朵
-        self._generate_initial_clouds()
+        # 初始化背景雲朵
+        self._generate_background_clouds()
 
-    def _generate_initial_clouds(self):
+    def _generate_background_clouds(self):
         """
-        生成初始雲朵分布在整個關卡天空中\n
+        生成背景雲朵分布在天空中\n
+        \n
+        雲朵Y位置設定為Y100~Y400，固定在天空背景中\n
         """
+        # 設定雲朵分布的Y範圍：Y100到Y400（天空區域）
+        cloud_top = 100  # 雲朵分布上限
+        cloud_bottom = 400  # 雲朵分布下限
+
         for i in range(self.cloud_count):
-            # 隨機分布在整個關卡範圍
-            x = random.uniform(
-                -self.cloud_respawn_distance,
-                self.level_width + self.cloud_respawn_distance,
-            )
+            # 在整個關卡寬度範圍內隨機分布
+            x = random.uniform(0, self.level_width)
 
-            # 雲朵主要分布在上半部天空
-            y = random.uniform(0, self.level_height * 0.4)
+            # 雲朵分布在Y100~Y400範圍內（天空區域）
+            y = random.uniform(cloud_top, cloud_bottom)
 
             # 隨機雲朵大小
             size = random.uniform(CLOUD_MIN_SIZE, CLOUD_MAX_SIZE)
 
-            # 隨機移動速度
-            speed = random.uniform(self.min_cloud_speed, self.max_cloud_speed)
+            # 速度設為0，雲朵不移動
+            speed = 0
 
-            # 隨機層次
-            layer = random.choice([0, 0, 1])  # 背景層機率較高
-
-            # 創建雲朵
-            cloud = Cloud(x, y, size, speed, layer)
+            # 創建背景雲朵
+            cloud = Cloud(x, y, size, speed)
             self.clouds.append(cloud)
 
-    def update(self, dt, camera_x):
+    def update(self, dt, player_x, player_y):
         """
-        更新所有雲朵位置\n
+        更新雲朵系統 - 背景雲朵不需要更新\n
         \n
         參數:\n
         dt (float): 時間差\n
-        camera_x (float): 攝影機 X 位置，用於判斷雲朵是否需要重生\n
+        player_x (float): 玩家X座標（保留相容性）\n
+        player_y (float): 玩家Y座標（保留相容性）\n
         """
-        for cloud in self.clouds:
-            # 更新雲朵位置
-            cloud.update(dt)
-
-            # 檢查雲朵是否移出右側螢幕太遠
-            if cloud.x > camera_x + SCREEN_WIDTH + self.cloud_respawn_distance:
-                # 重新定位到左側
-                cloud.x = camera_x - self.cloud_respawn_distance
-                cloud.y = random.uniform(0, self.level_height * 0.4)
-                cloud.size = random.uniform(CLOUD_MIN_SIZE, CLOUD_MAX_SIZE)
-                cloud.speed = random.uniform(self.min_cloud_speed, self.max_cloud_speed)
-                cloud.layer = random.choice([0, 0, 1])
-
-                # 更新雲朵尺寸
-                cloud.width = cloud.base_width * cloud.size
-                cloud.height = cloud.base_height * cloud.size
-
-                # 更新雲朵顏色
-                if cloud.layer == 0:
-                    cloud.color = CLOUD_BACKGROUND_COLOR
-                else:
-                    cloud.color = CLOUD_FOREGROUND_COLOR
+        # 背景雲朵固定不動，不需要更新
+        pass
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """
-        繪製所有雲朵 - 先畫背景層再畫前景層\n
+        繪製背景雲朵 - 固定在背景位置\n
         \n
         參數:\n
         screen (pygame.Surface): 繪製表面\n
         camera_x (float): 攝影機 X 偏移\n
         camera_y (float): 攝影機 Y 偏移\n
         """
-        # 先繪製背景層雲朵
+        # 繪製所有背景雲朵
         for cloud in self.clouds:
-            if cloud.layer == 0:
-                cloud.draw(screen, camera_x, camera_y)
-
-        # 再繪製前景層雲朵
-        for cloud in self.clouds:
-            if cloud.layer == 1:
-                cloud.draw(screen, camera_x, camera_y)
+            cloud.draw(screen, camera_x, camera_y)

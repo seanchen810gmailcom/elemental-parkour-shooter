@@ -211,7 +211,11 @@ CLOUD_MIN_SPEED = 0.5  # 最小移動速度
 CLOUD_MAX_SPEED = 2.0  # 最大移動速度
 CLOUD_RESPAWN_DISTANCE = 200  # 雲朵重生距離
 
-# 雲朵系統顏色設定
+# 雲朵圖片設定
+CLOUD_IMAGE_PATH = "素材/Cloud.png"  # 雲朵圖片路徑
+CLOUD_IMAGE_BASE_SIZE = (100, 60)  # 雲朵圖片基礎大小（寬度, 高度）
+
+# 雲朵系統顏色設定（當圖片載入失敗時的備用顏色）
 CLOUD_BACKGROUND_COLOR = (255, 255, 255, 180)  # 背景層雲朵顏色（純白半透明）
 CLOUD_FOREGROUND_COLOR = (255, 255, 255, 220)  # 前景層雲朵顏色（純白較不透明）
 
