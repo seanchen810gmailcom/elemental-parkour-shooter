@@ -452,10 +452,7 @@ class LevelManager:
         self.star_x = 0  # 星星位置
         self.star_y = 0
         self.star_visible = False  # 勝利星星是否可見（只有Boss被擊敗後才可見）
-        # 在最右邊放置破關星星
-        self.end_star_x = self.level_width - 100  # 在地圖最右邊的星星
-        self.end_star_y = SCREEN_HEIGHT - 200
-        self.end_star_collected = False
+        # 移除最右邊的破關星星，只保留Boss勝利星星
         self.generate_level()
 
     def generate_level(self):
@@ -550,10 +547,6 @@ class LevelManager:
         self.platforms.append(left_wall)
         self.platforms.append(right_wall)
 
-        # 在最右邊創建破關星星的平台
-        end_platform = Platform(self.end_star_x - 150, self.end_star_y + 50, 300, 40)
-        self.platforms.append(end_platform)
-
     def place_target_star(self):
         """
         在最高層放置閃閃發亮的目標星星\n
@@ -631,7 +624,7 @@ class LevelManager:
 
     def check_star_collision(self, player):
         """
-        檢查玩家是否碰到目標星星（Boss星星或最右邊的破關星星）\n
+        檢查玩家是否碰到目標星星（只有Boss勝利星星）\n
         \n
         參數:\n
         player (Player): 玩家物件\n
@@ -652,21 +645,6 @@ class LevelManager:
 
             if player_rect.colliderect(star_rect):
                 self.star_collected = True
-                return True
-
-        # 檢查最右邊的破關星星
-        if not self.end_star_collected:
-            star_size = 30
-            end_star_rect = pygame.Rect(
-                self.end_star_x - star_size // 2,
-                self.end_star_y - star_size // 2,
-                star_size,
-                star_size,
-            )
-            player_rect = pygame.Rect(player.x, player.y, player.width, player.height)
-
-            if player_rect.colliderect(end_star_rect):
-                self.end_star_collected = True
                 return True
 
         return False
@@ -765,10 +743,6 @@ class LevelManager:
         if not self.star_collected and self.star_visible:
             self.draw_target_star(screen, camera_x, camera_y)
 
-        # 繪製最右邊的破關星星（如果還沒被收集）
-        if not self.end_star_collected:
-            self.draw_end_star(screen, camera_x, camera_y)
-
     def draw_target_star(self, screen, camera_x=0, camera_y=0):
         """
         繪製閃閃發亮的目標星星\n
@@ -813,69 +787,6 @@ class LevelManager:
 
             # 繪製星星主體（五角星）
             star_color = (255, 255, int(150 + flash_intensity * 105))
-            star_points = []
-
-            # 計算五角星的頂點
-            for i in range(10):
-                angle = math.pi * i / 5
-                if i % 2 == 0:
-                    # 外圍頂點
-                    radius = star_size
-                else:
-                    # 內圍頂點
-                    radius = star_size * 0.4
-
-                x = screen_x + radius * math.cos(angle - math.pi / 2)
-                y = screen_y + radius * math.sin(angle - math.pi / 2)
-                star_points.append((x, y))
-
-            if len(star_points) >= 3:
-                pygame.draw.polygon(screen, star_color, star_points)
-
-    def draw_end_star(self, screen, camera_x=0, camera_y=0):
-        """
-        繪製最右邊的破關星星\n
-        \n
-        參數:\n
-        screen (pygame.Surface): 遊戲畫面\n
-        camera_x (int): 攝影機 x 偏移\n
-        camera_y (int): 攝影機 y 偏移\n
-        """
-        # 計算螢幕位置
-        screen_x = self.end_star_x - camera_x
-        screen_y = self.end_star_y - camera_y
-
-        # 只在螢幕範圍內繪製
-        if (
-            -50 <= screen_x <= SCREEN_WIDTH + 50
-            and -50 <= screen_y <= SCREEN_HEIGHT + 50
-        ):
-
-            # 創建閃爍效果
-            import time
-
-            flash_intensity = abs(math.sin(time.time() * 4)) * 0.5 + 0.5
-
-            # 星星大小（稍微大一點）
-            star_size = 35
-
-            # 繪製發光外圈（綠色調，表示破關星星）
-            glow_color = (100 + int(flash_intensity * 155), 255, 100)
-            for i in range(5, 0, -1):
-                alpha = int((6 - i) * flash_intensity * 50)
-                glow_surface = pygame.Surface((star_size + i * 4, star_size + i * 4))
-                glow_surface.set_alpha(alpha)
-                glow_surface.fill(glow_color)
-                screen.blit(
-                    glow_surface,
-                    (
-                        screen_x - star_size // 2 - i * 2,
-                        screen_y - star_size // 2 - i * 2,
-                    ),
-                )
-
-            # 繪製星星主體（五角星，綠色調）
-            star_color = (150 + int(flash_intensity * 105), 255, 150)
             star_points = []
 
             # 計算五角星的頂點
