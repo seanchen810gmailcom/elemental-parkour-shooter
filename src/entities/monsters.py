@@ -106,23 +106,19 @@ class Monster(GameObject):
 
     def detect_player(self, player):
         """
-        檢測玩家是否在偵測範圍內\n
+        檢測玩家是否在偵測範圍內 - 修改為無限追蹤\n
         \n
         參數:\n
         player (Player): 玩家物件\n
         \n
         回傳:\n
-        bool: True 表示玩家在偵測範圍內\n
+        bool: True 表示玩家在偵測範圍內（現在永遠為True）\n
         """
         if not player.is_alive:
             return False
 
-        # 計算與玩家的距離
-        dx = player.x - self.x
-        dy = player.y - self.y
-        distance = math.sqrt(dx**2 + dy**2)
-
-        return distance <= self.detection_range
+        # 修改：移除距離限制，怪物現在可以無限追蹤玩家
+        return True  # 永遠能檢測到玩家
 
     def can_attack_player(self, player):
         """
@@ -151,7 +147,7 @@ class Monster(GameObject):
 
     def move_towards_player(self, player):
         """
-        朝玩家方向移動\n
+        朝玩家方向移動 - 強化版無限追蹤\n
         \n
         參數:\n
         player (Player): 玩家物件\n
@@ -169,12 +165,17 @@ class Monster(GameObject):
             direction_x = dx / distance
             direction_y = dy / distance
 
-            # 設定移動速度
-            self.velocity_x = direction_x * self.current_speed
+            # 設定移動速度（降低追蹤速度增強倍數以避免卡住）
+            enhanced_speed = self.current_speed * 1.1  # 從1.5倍降至1.1倍
+            self.velocity_x = direction_x * enhanced_speed
 
-            # 如果玩家在上方且距離不遠，嘗試跳躍
-            if dy < -50 and abs(dx) < 100 and self.on_ground:
-                self.velocity_y = -12  # 跳躍力道
+            # 更積極的跳躍追蹤：只要玩家在上方就跳躍
+            if dy < -30 and self.on_ground:  # 降低跳躍門檻
+                self.velocity_y = -15  # 增強跳躍力道
+
+            # 如果玩家在很遠的地方，給予較小的移動加速以避免卡住
+            if distance > 300:
+                self.velocity_x *= 1.2  # 從1.8倍降至1.2倍，避免過快
 
     def patrol_movement(self):
         """
@@ -240,7 +241,7 @@ class Monster(GameObject):
 
     def update_ai(self, player, platforms):
         """
-        更新 AI 行為 - 基礎 AI 狀態機\n
+        更新 AI 行為 - 修改為永遠追蹤玩家的AI\n
         \n
         參數:\n
         player (Player): 玩家物件\n
@@ -249,27 +250,26 @@ class Monster(GameObject):
         if not self.is_alive:
             return
 
-        # 檢測玩家
-        player_detected = self.detect_player(player)
+        # 修改：移除偵測範圍限制，怪物現在永遠追蹤玩家
+        player_detected = True  # 永遠能檢測到玩家
         can_attack = self.can_attack_player(player)
 
         # AI 狀態機
         if can_attack:
             self.ai_state = "attack"
             self.attack_player(player)
-        elif player_detected:
+        else:
+            # 永遠處於追蹤狀態，不再有巡邏模式
             self.ai_state = "chase"
             self.move_towards_player(player)
-        else:
-            self.ai_state = "patrol"
-            self.patrol_movement()
 
-    def update_physics(self, platforms):
+    def update_physics(self, platforms, level_width=None):
         """
         更新物理狀態 - 重力、碰撞、移動\n
         \n
         參數:\n
         platforms (list): 平台列表\n
+        level_width (int): 關卡實際寬度，如果不提供則使用螢幕寬度\n
         """
         # 應用擊退效果
         if self.knockback_velocity > 0:
@@ -288,18 +288,21 @@ class Monster(GameObject):
         self.x += self.velocity_x
         self.y += self.velocity_y
 
-        # 檢查是否即將掉出所屬平台
-        self.check_platform_boundary()
+        # 檢查是否即將掉出所屬平台（已停用，讓怪物可以自由追蹤）
+        # self.check_platform_boundary()
 
         # 處理碰撞
         self.handle_collisions(platforms)
 
-        # 螢幕邊界處理
+        # 關卡邊界處理 - 使用關卡實際寬度而不是螢幕寬度
+        actual_width = level_width if level_width is not None else SCREEN_WIDTH
+
+        # 只在怪物真正超出關卡邊界時才限制，而不是螢幕邊界
         if self.x < 0:
             self.x = 0
             self.direction = 1
-        elif self.x + self.width > SCREEN_WIDTH:
-            self.x = SCREEN_WIDTH - self.width
+        elif self.x + self.width > actual_width:
+            self.x = actual_width - self.width
             self.direction = -1
 
         # 如果掉出螢幕底部就死亡
@@ -311,30 +314,12 @@ class Monster(GameObject):
 
     def check_platform_boundary(self):
         """
-        檢查怪物是否即將掉出所屬平台，如果是則調頭\n
+        檢查怪物是否即將掉出所屬平台 - 修改為無限追蹤模式\n
+        怪物現在可以自由追蹤玩家，不受平台邊界限制\n
         """
-        if self.home_platform is None:
-            return
-
-        # 檢查左邊界
-        if self.x <= self.home_platform.x + self.platform_margin:
-            self.x = self.home_platform.x + self.platform_margin
-            self.direction = 1  # 向右轉
-            self.velocity_x = 0
-
-        # 檢查右邊界
-        elif (
-            self.x + self.width
-            >= self.home_platform.x + self.home_platform.width - self.platform_margin
-        ):
-            self.x = (
-                self.home_platform.x
-                + self.home_platform.width
-                - self.platform_margin
-                - self.width
-            )
-            self.direction = -1  # 向左轉
-            self.velocity_x = 0
+        # 移除所有平台邊界限制，讓怪物可以自由移動追蹤玩家
+        # 怪物現在可以跳下平台、穿越邊界來追蹤玩家
+        return  # 直接返回，不進行任何邊界檢查
 
     def handle_collisions(self, platforms):
         """
@@ -380,13 +365,14 @@ class Monster(GameObject):
                     self.x = platform.rect.right
                     self.direction = 1  # 改變巡邏方向
 
-    def update(self, player, platforms):
+    def update(self, player, platforms, level_width=None):
         """
         怪物的主要更新方法\n
         \n
         參數:\n
         player (Player): 玩家物件\n
         platforms (list): 平台列表\n
+        level_width (int): 關卡實際寬度\n
         """
         if not self.is_alive:
             return
@@ -397,8 +383,8 @@ class Monster(GameObject):
         # 更新 AI 行為
         self.update_ai(player, platforms)
 
-        # 更新物理狀態
-        self.update_physics(platforms)
+        # 更新物理狀態，傳遞關卡寬度
+        self.update_physics(platforms, level_width)
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """
@@ -684,15 +670,16 @@ class LavaMonster(Monster):
 
             self.last_heal_time = current_time
 
-    def update(self, player, platforms):
+    def update(self, player, platforms, level_width=None):
         """
         岩漿怪的更新方法\n
         \n
         參數:\n
         player (Player): 玩家物件\n
         platforms (list): 平台列表\n
+        level_width (int): 關卡實際寬度\n
         """
-        super().update(player, platforms)
+        super().update(player, platforms, level_width)
 
         if self.is_alive:
             # 更新熔岩球
@@ -1043,15 +1030,16 @@ class WaterMonster(Monster):
 
         return hit
 
-    def update(self, player, platforms):
+    def update(self, player, platforms, level_width=None):
         """
         水怪的更新方法\n
         \n
         參數:\n
         player (Player): 玩家物件\n
         platforms (list): 平台列表\n
+        level_width (int): 關卡實際寬度\n
         """
-        super().update(player, platforms)
+        super().update(player, platforms, level_width)
 
         if self.is_alive:
             # 更新水彈
@@ -1314,16 +1302,16 @@ class SniperBoss(Monster):
             "y": start_y,
             "target_x": target_x,  # 追蹤目標座標
             "target_y": target_y,
-            "speed": 8,  # 追蹤子彈速度
+            "speed": 24,  # 追蹤子彈速度（原本8 * 3 = 24）
             "damage": self.damage,
-            "lifetime": 7.0,  # 7秒後消失
+            "lifetime": 35.0,  # 35秒後消失（原本7 * 5 = 35）
             "created_time": current_time,
             "tracking_strength": 0.1,  # 追蹤強度，控制轉彎靈敏度
         }
 
         self.tracking_bullets.append(tracking_bullet)
         self.last_tracking_bullet_time = current_time
-        print(f"🎯 狙擊Boss發射追蹤子彈！")
+        print(f"🎯 狙擊Boss發射追蹤子彈！速度強化三倍，持續時間五倍！")
         return tracking_bullet
 
     def update_tracking_bullets(self, player):
@@ -1439,7 +1427,7 @@ class SniperBoss(Monster):
             "x": self.x + self.width // 2,  # 震波中心
             "y": self.y + self.height,  # 在Boss腳下
             "radius": 0,  # 初始半徑
-            "max_radius": 150,  # 最大擴散半徑
+            "max_radius": 450,  # 最大擴散半徑（原本150 * 3 = 450）
             "expansion_speed": 8,  # 擴散速度
             "damage": int(self.damage * 1.2),  # 震波傷害
             "knockback_force": 200,  # 擊退力道
@@ -1449,7 +1437,9 @@ class SniperBoss(Monster):
         }
 
         self.shockwaves.append(shockwave)
-        print(f"💥 震波產生！半徑將擴散至 {shockwave['max_radius']} 像素")
+        print(
+            f"💥 震波產生！半徑將擴散至 {shockwave['max_radius']} 像素（強化三倍範圍）"
+        )
         return shockwave
 
     def update_shockwaves(self, player):
@@ -1652,8 +1642,8 @@ class SniperBoss(Monster):
         if not self.is_alive:
             return
 
-        # 檢測玩家
-        player_detected = self.detect_player(player)
+        # 狙擊Boss永遠會追蹤玩家，不受檢測範圍限制
+        player_detected = True  # Boss永遠能檢測到玩家
 
         # 計算與玩家的距離
         dx = player.x - self.x
@@ -1684,21 +1674,25 @@ class SniperBoss(Monster):
                 self.ai_state = "attack"
                 self.attack_player(player)
 
-            # 追擊玩家
+            # Boss會持續追擊玩家，不管距離多遠
             else:
                 self.ai_state = "chase"
                 self.move_towards_player(player)
-        else:
-            # 巡邏模式
-            self.ai_state = "patrol"
-            self.patrol_movement()
+
+                # 狙擊Boss特殊增強：距離越遠，移動速度越快（降低增強倍數）
+                if distance > 400:
+                    # 超遠距離時給予1.3倍速度加成（從2倍降至1.3倍）
+                    self.velocity_x *= 1.3
+                elif distance > 200:
+                    # 遠距離時給予1.2倍速度加成（從1.5倍降至1.2倍）
+                    self.velocity_x *= 1.2
 
         # 保持與玩家的戰術距離（如果太近就後退）
         if distance < 80 and not self.is_jumping:
             retreat_direction = -1 if dx > 0 else 1
             self.velocity_x = retreat_direction * self.current_speed * 0.8
 
-    def update(self, player, platforms, bullets=None):
+    def update(self, player, platforms, bullets=None, level_width=None):
         """
         狙擊Boss的更新方法\n
         \n
@@ -1706,8 +1700,9 @@ class SniperBoss(Monster):
         player (Player): 玩家物件\n
         platforms (list): 平台列表\n
         bullets (list): 玩家子彈列表（可選）\n
+        level_width (int): 關卡實際寬度\n
         """
-        super().update(player, platforms)
+        super().update(player, platforms, level_width)
 
         if self.is_alive:
             # 更新追蹤子彈
@@ -2037,15 +2032,16 @@ class TornadoMonster(Monster):
             # 增加一些隨機的左右搖擺
             self.velocity_x += random.uniform(-2, 2)
 
-    def update(self, player, platforms):
+    def update(self, player, platforms, level_width=None):
         """
         龍捲風怪的更新方法\n
         \n
         參數:\n
         player (Player): 玩家物件\n
         platforms (list): 平台列表\n
+        level_width (int): 關卡實際寬度\n
         """
-        super().update(player, platforms)
+        super().update(player, platforms, level_width)
 
         if self.is_alive:
             # 更新旋轉狀態

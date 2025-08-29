@@ -82,7 +82,7 @@ MELEE_KNOCKBACK = 100
 LAVA_MONSTER_WIDTH = 50
 LAVA_MONSTER_HEIGHT = 50
 LAVA_MONSTER_COLOR = RED
-LAVA_MONSTER_SPEED = 4  # 提升移動速度 3→4
+LAVA_MONSTER_SPEED = 2  # 降低移動速度避免被跑酷板卡住（從4降至2）
 LAVA_MONSTER_HEALTH = 120  # 提升血量 80→120 (+50%)
 LAVA_MONSTER_DAMAGE = 45  # 提升傷害 30→45 (+50%)
 
@@ -94,7 +94,7 @@ BOSS_HEIGHT_MULTIPLIER = 2
 WATER_MONSTER_WIDTH = 90  # 放大一倍：45 → 90
 WATER_MONSTER_HEIGHT = 90  # 放大一倍：45 → 90
 WATER_MONSTER_COLOR = BLUE
-WATER_MONSTER_SPEED = 6  # 提升移動速度 5→6
+WATER_MONSTER_SPEED = 3  # 降低移動速度避免被跑酷板卡住（從6降至3）
 WATER_MONSTER_HEALTH = 90  # 提升血量 60→90 (+50%)
 WATER_MONSTER_DAMAGE = 35  # 提升傷害 25→35 (+40%)
 
@@ -102,7 +102,7 @@ WATER_MONSTER_DAMAGE = 35  # 提升傷害 25→35 (+40%)
 TORNADO_MONSTER_WIDTH = 40
 TORNADO_MONSTER_HEIGHT = 70
 TORNADO_MONSTER_COLOR = (200, 200, 255)  # 淺藍色，不再使用灰色
-TORNADO_MONSTER_SPEED = 10  # 提升移動速度 8→10
+TORNADO_MONSTER_SPEED = 4  # 降低移動速度避免被跑酷板卡住（從10降至4）
 TORNADO_MONSTER_HEALTH = 65  # 提升血量 40→65 (+62.5%)
 TORNADO_MONSTER_DAMAGE = 50  # 提升傷害 35→50 (+43%)
 
@@ -110,7 +110,7 @@ TORNADO_MONSTER_DAMAGE = 50  # 提升傷害 35→50 (+43%)
 SNIPER_BOSS_WIDTH = 65
 SNIPER_BOSS_HEIGHT = 80
 SNIPER_BOSS_COLOR = (150, 0, 150)  # 深紫色
-SNIPER_BOSS_SPEED = 6  # 中等移動速度
+SNIPER_BOSS_SPEED = 3  # 降低移動速度避免被跑酷板卡住（從8降至3）
 SNIPER_BOSS_HEALTH = 1500  # 與岩漿Boss相同的血量
 SNIPER_BOSS_DAMAGE = 60  # 高攻擊力
 
@@ -120,7 +120,7 @@ SNIPER_BOSS_DAMAGE = 60  # 高攻擊力
 LAVA_TORNADO_BOSS_WIDTH = 120
 LAVA_TORNADO_BOSS_HEIGHT = 150
 LAVA_TORNADO_BOSS_COLOR = ORANGE
-LAVA_TORNADO_BOSS_SPEED = 5  # 提升Boss移動速度 4→5
+LAVA_TORNADO_BOSS_SPEED = 2  # 降低Boss移動速度避免被跑酷板卡住（從5降至2）
 LAVA_TORNADO_BOSS_HEALTH = 1500  # 提升Boss血量 1000→1500 (+50%)
 LAVA_TORNADO_BOSS_DAMAGE = 75  # 提升Boss傷害 50→75 (+50%)
 
@@ -128,7 +128,7 @@ LAVA_TORNADO_BOSS_DAMAGE = 75  # 提升Boss傷害 50→75 (+50%)
 TSUNAMI_BOSS_WIDTH = 150
 TSUNAMI_BOSS_HEIGHT = 120
 TSUNAMI_BOSS_COLOR = DARK_GRAY
-TSUNAMI_BOSS_SPEED = 4  # 提升Boss移動速度 3→4
+TSUNAMI_BOSS_SPEED = 2  # 降低Boss移動速度避免被跑酷板卡住（從4降至2）
 TSUNAMI_BOSS_HEALTH = 1500  # 提升Boss血量 1000→1500 (+50%)
 TSUNAMI_BOSS_DAMAGE = 90  # 提升Boss傷害 60→90 (+50%)
 
@@ -287,6 +287,32 @@ SNIPER_RIFLE_REVERSE_MUZZLE_OFFSET_X = -50  # 反向圖片的槍口X偏移（相
 SNIPER_RIFLE_REVERSE_MUZZLE_OFFSET_Y = -5  # 反向圖片的槍口Y偏移（相對於圖片中心）
 
 SNIPER_RIFLE_COLOR = RED  # 狙擊槍備用顏色（當圖片載入失敗時使用）
+
+######################散彈槍武器設定######################
+
+# 散彈槍圖片設定
+SHOTGUN_IMAGE_PATH = (
+    "素材/20052023447pic_outside_d1f490258290.png"  # 散彈槍正向圖片路徑（往右射擊）
+)
+SHOTGUN_REVERSE_IMAGE_PATH = None  # 反向圖片通過程式鏡像生成
+SHOTGUN_IMAGE_SIZE = (110, 55)  # 散彈槍圖片大小（寬度, 高度）- 介於機關槍和狙擊槍之間
+SHOTGUN_ROTATION_OFFSET = 0  # 圖片旋轉偏移角度，用於對齊槍口
+
+# 正向散彈槍槍口偏移（往右射擊圖片）
+SHOTGUN_MUZZLE_OFFSET_X = 45  # 槍口相對於槍圖片中心的X偏移（往槍管尖端）
+SHOTGUN_MUZZLE_OFFSET_Y = -6  # 槍口相對於槍圖片中心的Y偏移（槍管中心）
+
+# 反向散彈槍槍口偏移（鏡像後的槍口位置）
+SHOTGUN_REVERSE_MUZZLE_OFFSET_X = -45  # 反向圖片的槍口X偏移（相對於圖片中心）
+SHOTGUN_REVERSE_MUZZLE_OFFSET_Y = -6  # 反向圖片的槍口Y偏移（相對於圖片中心）
+
+SHOTGUN_COLOR = RED  # 散彈槍備用顏色（當圖片載入失敗時使用）
+
+# 散彈槍散射設定
+SHOTGUN_PELLET_COUNT = 5  # 每次射擊的彈丸數量
+SHOTGUN_SPREAD_ANGLE = 1.0  # 散射角度（弧度）
+SHOTGUN_DAMAGE_PER_PELLET = 25  # 每顆彈丸的傷害
+SHOTGUN_RANGE_MODIFIER = 0.8  # 射程修正（相對於其他武器）
 
 ######################怪物圖片設定######################
 

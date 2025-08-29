@@ -256,7 +256,7 @@ class MonsterManager:
             # 重新載入Boss大小的圖片
             if hasattr(self.boss, "reload_image_if_boss"):
                 self.boss.reload_image_if_boss()
-            
+
             # 更新Boss的碰撞矩形大小（修復子彈碰撞問題）
             self.boss.update_rect()
 
@@ -280,6 +280,8 @@ class MonsterManager:
             self.boss.last_fire_bullet_time = 0
             self.boss.fire_bullets = []
 
+            # 設定為Boss（重要：啟用永久追蹤）
+            self.boss.is_boss = True
             self.boss.monster_type = "boss_lava_monster"
             print(f"🔥 第一階段Boss - 岩漿怪王 出現！血量是一般怪物的3倍！")
 
@@ -331,7 +333,7 @@ class MonsterManager:
 
         print(f"🎯 狙擊Boss出現時額外生成了 {spawned_count} 個小怪！")
 
-    def update(self, player, platforms, dt, bullets=None):
+    def update(self, player, platforms, dt, bullets=None, level_width=None):
         """
         更新所有怪物和管理器狀態\n
         \n
@@ -340,21 +342,22 @@ class MonsterManager:
         platforms (list): 平台列表\n
         dt (float): 距離上次更新的時間（秒）\n
         bullets (list): 玩家子彈列表（可選，用於Boss躲避）\n
+        level_width (int): 關卡實際寬度\n
         \n
         回傳:\n
         dict: 更新結果資訊\n
         """
-        # 更新所有活躍怪物
+        # 更新所有活躍怪物，傳遞關卡寬度
         for monster in self.monsters:
-            monster.update(player, platforms)
+            monster.update(player, platforms, level_width)
 
         # 更新Boss（如果存在）
         if self.boss:
             # 如果是狙擊Boss，需要傳入子彈資訊
             if hasattr(self.boss, "tracking_bullets"):  # 狙擊Boss的標識
-                self.boss.update(player, platforms, bullets)
+                self.boss.update(player, platforms, bullets, level_width)
             else:
-                self.boss.update(player, platforms)
+                self.boss.update(player, platforms, level_width)
 
             # 處理岩漿Boss的火焰子彈邏輯（只針對岩漿Boss）
             if hasattr(self.boss, "fire_bullets"):

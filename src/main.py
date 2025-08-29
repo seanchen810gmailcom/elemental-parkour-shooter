@@ -344,8 +344,9 @@ class ElementalParkourShooter:
             # 更新怪物系統
             platforms = self.level_manager.get_platforms()
             bullets = self.weapon_manager.bullets  # 獲取玩家子彈用於Boss躲避
+            level_width = self.level_manager.level_width  # 獲取關卡實際寬度
             monster_update_result = self.monster_manager.update(
-                self.player, platforms, dt, bullets
+                self.player, platforms, dt, bullets, level_width
             )
 
             # 根據怪物擊殺數增加分數

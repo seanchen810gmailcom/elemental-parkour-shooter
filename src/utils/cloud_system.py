@@ -244,7 +244,7 @@ class CloudSystem:
         self.clouds = []  # 雲朵列表
 
         # 雲朵生成設定
-        self.cloud_count = CLOUD_COUNT  # 總雲朵數量
+        self.cloud_count = 20  # 增加雲朵數量
 
         # 初始化背景雲朵
         self._generate_background_clouds()
@@ -255,9 +255,9 @@ class CloudSystem:
         \n
         雲朵Y位置設定為Y100~Y400，固定在天空背景中\n
         """
-        # 設定雲朵分布的Y範圍：Y100到Y400（天空區域）
-        cloud_top = 100  # 雲朵分布上限
-        cloud_bottom = 400  # 雲朵分布下限
+        # 設定雲朵分布的Y範圍：Y200到Y500（稍微降低一點）
+        cloud_top = 200  # 雲朵分布上限
+        cloud_bottom = 500  # 雲朵分布下限
 
         for i in range(self.cloud_count):
             # 在整個關卡寬度範圍內隨機分布
