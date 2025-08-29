@@ -759,7 +759,7 @@ class LavaMonster(Monster):
             is_boss = (
                 self.width > LAVA_MONSTER_WIDTH or self.height > LAVA_MONSTER_HEIGHT
             )
-            
+
             # 如果是Boss，確保圖片底部對齊Boss的碰撞體積底部
             if is_boss:
                 # 計算Boss圖片繪製位置，確保圖片底部與碰撞體積底部對齊
