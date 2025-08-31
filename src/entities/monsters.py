@@ -91,6 +91,9 @@ class Monster(GameObject):
         self.is_alive = True
         self.death_animation_time = 0
 
+        # 計分相關
+        self.score_value = 100  # 基礎分數，各怪物類型可以覆蓋這個值
+
     def update_status_effects(self):
         """
         更新所有狀態效果 - 移除過期效果並計算當前速度\n
@@ -214,16 +217,25 @@ class Monster(GameObject):
         self.knockback_velocity = force
         self.knockback_direction = direction
 
-    def take_damage(self, damage):
+    def take_damage(self, damage, attack_type="normal"):
         """
         受到傷害\n
         \n
         參數:\n
         damage (int): 受到的傷害值\n
+        attack_type (str): 攻擊類型，"melee"表示甩槍攻擊，"normal"表示普通攻擊\n
         \n
         回傳:\n
         bool: True 表示怪物死亡\n
         """
+        # 如果是甩槍攻擊且不是Boss，直接秒殺普通怪物
+        if attack_type == "melee" and not self.monster_type.endswith("boss"):
+            self.health = 0
+            self.is_alive = False
+            print(f"💀 {self.monster_type}被甩槍攻擊秒殺！")
+            return True
+
+        # 一般傷害處理
         self.health -= damage
         if self.health <= 0:
             self.health = 0
@@ -543,9 +555,16 @@ class LavaMonster(Monster):
         )
 
         # 岩漿怪特殊屬性
-        self.lava_ball_cooldown = 3.0  # 熔岩球攻擊冷卻時間
+        self.lava_ball_cooldown = 3.0  # 熔岩球攻擊冷卻時間（設定為3秒）
+
+        # 岩漿怪的分數值（較高，因為比較強）
+        self.score_value = 150
         self.last_lava_ball_time = 0
         self.lava_balls = []  # 噴射的熔岩球列表
+
+        # 新增：自動發射系統
+        self.auto_fire_interval = 3.0  # 每3秒自動發射一次
+        self.last_auto_fire_time = 0  # 上次自動發射時間
 
         # 載入怪物圖片
         self.image = self.load_monster_image()
@@ -600,8 +619,9 @@ class LavaMonster(Monster):
         dict: 熔岩球資訊\n
         """
         current_time = time.time()
-        if current_time - self.last_lava_ball_time < self.lava_ball_cooldown:
-            return None
+
+        # 移除冷卻時間檢查，讓自動發射系統處理冷卻
+        # 這樣create_lava_ball可以隨時被呼叫
 
         # 計算發射方向
         start_x = self.x + self.width // 2
@@ -744,6 +764,18 @@ class LavaMonster(Monster):
 
             # 如果是Boss模式，執行自動回血
             self.auto_heal()
+
+            # 新增：自動發射系統 - 每3秒朝玩家發射火球
+            current_time = time.time()
+            if current_time - self.last_auto_fire_time >= self.auto_fire_interval:
+                if player.is_alive:
+                    # 朝玩家中心位置發射火球
+                    player_center_x = player.x + player.width // 2
+                    player_center_y = player.y + player.height // 2
+                    lava_ball = self.create_lava_ball(player_center_x, player_center_y)
+                    if lava_ball:
+                        self.last_auto_fire_time = current_time
+                        print(f"🔥 岩漿怪自動發射火球朝向玩家！")
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """
@@ -907,6 +939,9 @@ class WaterMonster(Monster):
         self.water_bullets = []  # 水彈列表
         self.dash_cooldown = 4.0  # 衝刺冷卻時間
         self.last_dash_time = 0
+
+        # 水怪的分數值（中等，移動快但血量少）
+        self.score_value = 120
 
         # 載入怪物圖片
         self.image = self.load_monster_image()
@@ -1257,12 +1292,12 @@ class SniperBoss(Monster):
         self.attack_range = 250  # 大幅增加攻擊範圍
 
         # 直線子彈系統
-        self.tracking_bullet_cooldown = 2.0  # 每2秒發射一次直線子彈（提高頻率）
+        self.tracking_bullet_cooldown = 4.0  # 每4秒發射一次直線子彈
         self.last_tracking_bullet_time = 0
         self.tracking_bullets = []
 
         # 震波攻擊系統
-        self.shockwave_cooldown = 6.0  # 震波攻擊冷卻時間（降低冷卻）
+        self.shockwave_cooldown = 10.0  # 震波攻擊冷卻時間（調慢攻擊速度）
         self.last_shockwave_time = 0
         self.is_jumping = False  # 是否在跳躍狀態
         self.jump_phase = "prepare"  # 跳躍階段：prepare, jumping, landing
@@ -1332,7 +1367,7 @@ class SniperBoss(Monster):
 
     def create_tracking_bullet(self, target_x, target_y):
         """
-        創建直線子彈（不再追蹤）\n
+        創建直線子彈（朝向玩家中心發射）\n
         \n
         參數:\n
         target_x (float): 目標 X 座標\n
@@ -1342,13 +1377,11 @@ class SniperBoss(Monster):
         dict or None: 直線子彈資訊\n
         """
         current_time = time.time()
-        if (
-            current_time - self.last_tracking_bullet_time
-            < self.tracking_bullet_cooldown
-        ):
-            return None
 
-        # 計算發射起點
+        # 移除冷卻時間檢查，讓自動發射系統處理冷卻
+        # 這樣create_tracking_bullet可以隨時被呼叫
+
+        # 計算發射起點（從Boss的中心發射）
         start_x = self.x + self.width // 2
         start_y = self.y + self.height // 2
 
@@ -1377,7 +1410,7 @@ class SniperBoss(Monster):
 
         self.tracking_bullets.append(straight_bullet)
         self.last_tracking_bullet_time = current_time
-        print(f"🎯 狙擊Boss發射直線子彈！不再追蹤玩家")
+        print(f"🎯 狙擊Boss發射直線子彈朝向玩家中心！")
         return straight_bullet
 
     def update_tracking_bullets(self, player):
@@ -1722,12 +1755,21 @@ class SniperBoss(Monster):
         dy = player.y - self.y
         distance = math.sqrt(dx**2 + dy**2)
 
+        # 自動發射系統：每4秒朝玩家中心發射子彈
+        current_time = time.time()
+        if (
+            current_time - self.last_tracking_bullet_time
+            >= self.tracking_bullet_cooldown
+        ):
+            if player.is_alive:
+                # 朝玩家中心位置發射
+                player_center_x = player.x + player.width // 2
+                player_center_y = player.y + player.height // 2
+                self.create_tracking_bullet(player_center_x, player_center_y)
+
         # 更積極的攻擊邏輯
         if player_detected:
-            # 不再使用子彈攻擊，專注於震波攻擊
-            current_time = time.time()
-
-            # 如果距離合適，考慮震波攻擊
+            # 震波攻擊檢查
             if (
                 distance <= 300
                 and current_time - self.last_shockwave_time >= self.shockwave_cooldown
@@ -1771,7 +1813,11 @@ class SniperBoss(Monster):
         super().update(player, platforms, level_width)
 
         if self.is_alive:
-            # 不再更新子彈相關功能
+            # 更新直線子彈
+            self.update_tracking_bullets(player)
+
+            # 檢查直線子彈碰撞
+            self.check_tracking_bullet_collision(player)
 
             # 更新震波
             self.update_shockwaves(player)
@@ -1865,7 +1911,22 @@ class SniperBoss(Monster):
         text_rect.bottom = bar_y - 5
         screen.blit(boss_text, text_rect)
 
-        # 不再繪製子彈
+        # 繪製直線子彈（考慮攝影機偏移）
+        for bullet in self.tracking_bullets:
+            bullet_screen_x = bullet["x"] - camera_x
+            bullet_screen_y = bullet["y"] - camera_y
+            # 只繪製在螢幕範圍內的子彈
+            if (
+                -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
+                and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
+            ):
+                # 繪製直線子彈（藍色）
+                pygame.draw.circle(
+                    screen, BLUE, (int(bullet_screen_x), int(bullet_screen_y)), 8
+                )
+                pygame.draw.circle(
+                    screen, WHITE, (int(bullet_screen_x), int(bullet_screen_y)), 4
+                )
 
         # 繪製震波
         for shockwave in self.shockwaves:
@@ -1930,6 +1991,9 @@ class TornadoMonster(Monster):
         self.last_teleport_time = 0
         self.is_spinning = False  # 是否在旋轉狀態
         self.spin_timer = 0
+
+        # 龍捲風怪的分數值（最高，因為最難對付）
+        self.score_value = 200
 
     def create_whirlwind(self, player):
         """

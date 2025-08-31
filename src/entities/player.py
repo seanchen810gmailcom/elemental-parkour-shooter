@@ -22,7 +22,7 @@ class Player(GameObject):
     提供完整的跑酷射擊功能：\n
     1. 基本移動（左右移動、跳躍）\n
     2. 進階跑酷（雙跳、爬牆、滑牆）\n
-    3. 戰鬥系統（槍械射擊、近戰攻擊）\n
+    3. 戰鬥系統（槍械射擊、甩槍攻擊）\n
     4. 健康和狀態管理\n
     \n
     參數:\n
@@ -33,7 +33,7 @@ class Player(GameObject):
     - A/D 或 左右鍵: 左右移動\n
     - W 或 空白鍵: 跳躍\n
     - 滑鼠左鍵: 射擊\n
-    - 滑鼠右鍵: 近戰攻擊\n
+    - 滑鼠右鍵: 甩槍攻擊\n
     - 1/2/3/4: 切換子彈類型\n
     """
 
@@ -118,7 +118,14 @@ class Player(GameObject):
             "jump": False,
             "shoot": False,
             "melee": False,
+            "ultimate": False,  # 新增必殺技按鍵狀態追蹤
         }
+
+        # 武器切換鍵的前一幀狀態追蹤
+        self.prev_key_1 = False
+        self.prev_key_2 = False
+        self.prev_key_3 = False
+        self.prev_key_4 = False
 
         # 射擊請求佇列
         self.pending_bullet = None
@@ -153,6 +160,18 @@ class Player(GameObject):
         self.ultimate_cooldown = 20.0  # 必殺技冷卻時間：20秒
         self.pending_ultimate = None  # 待發射的必殺技
 
+        # 甩槍動畫系統
+        self.is_melee_attacking = False  # 是否正在進行甩槍攻擊
+        self.melee_animation_time = 0  # 甩槍動畫時間
+        self.melee_animation_duration = 1.2  # 甩槍動畫持續時間（1.2秒）
+        self.weapon_swing_angle = 0  # 武器甩動角度
+
+        # 飛槍動畫系統 - 武器飛離玩家轉圈再回來
+        self.weapon_flying = False  # 武器是否在飛行中
+        self.weapon_fly_distance = 0  # 武器飛離玩家的距離
+        self.weapon_spin_angle = 0  # 武器旋轉角度
+        self.weapon_max_fly_distance = 120  # 武器最遠飛行距離
+
         # 回血系統
         self.heal_cooldown = 20.0  # 每20秒回血一次
         self.last_heal_time = time.time()  # 上次回血時間
@@ -171,14 +190,14 @@ class Player(GameObject):
         處理的輸入:\n
         - 移動按鍵：更新 keys_pressed 狀態\n
         - 跳躍按鍵：立即觸發跳躍動作\n
-        - 攻擊按鍵：觸發射擊或近戰\n
+        - 攻擊按鍵：觸發射擊或甩槍攻擊\n
         - 子彈切換：改變當前子彈類型\n
         """
         # 記錄水平移動按鍵狀態
         self.keys_pressed["left"] = keys[pygame.K_a] or keys[pygame.K_LEFT]
         self.keys_pressed["right"] = keys[pygame.K_d] or keys[pygame.K_RIGHT]
 
-        # 跳躍輸入（W 鍵或空白鍵）
+        # 跳躍輸入（W 鍵或空白鍵）- 修正按鍵檢測邏輯
         jump_input = keys[pygame.K_w] or keys[pygame.K_UP] or keys[pygame.K_SPACE]
         if jump_input and not self.keys_pressed["jump"]:
             # 按鍵從沒按下變成按下，觸發跳躍
@@ -186,33 +205,44 @@ class Player(GameObject):
         self.keys_pressed["jump"] = jump_input
 
         # 射擊輸入（滑鼠左鍵）- 支援連續射擊，現在傳遞攝影機偏移
-        if mouse_buttons[0]:  # 按住滑鼠左鍵連續射擊
+        shoot_input = mouse_buttons[0]  # 滑鼠左鍵狀態
+        if shoot_input:  # 按住滑鼠左鍵連續射擊
             bullet_info = self.shoot(camera_x, camera_y)
             if bullet_info:
                 self.pending_bullet = bullet_info
-        self.keys_pressed["shoot"] = mouse_buttons[0]
+        self.keys_pressed["shoot"] = shoot_input
 
-        # 近戰攻擊（滑鼠右鍵）
-        if mouse_buttons[2] and not self.keys_pressed["melee"]:
+        # 甩槍攻擊（滑鼠右鍵）- 修正按鍵檢測邏輯
+        melee_input = mouse_buttons[2]  # 滑鼠右鍵狀態
+        if melee_input and not self.keys_pressed["melee"]:
+            # 按鍵從沒按下變成按下，觸發甩槍攻擊
             self.melee_attack()
-        self.keys_pressed["melee"] = mouse_buttons[2]
+        self.keys_pressed["melee"] = melee_input
 
-        # 武器切換
-        if keys[pygame.K_1]:
+        # 武器切換 - 修正按鍵檢測，避免重複觸發
+        if keys[pygame.K_1] and not getattr(self, "prev_key_1", False):
             self.current_weapon = "machine_gun"
-        elif keys[pygame.K_2]:
+        elif keys[pygame.K_2] and not getattr(self, "prev_key_2", False):
             self.current_weapon = "assault_rifle"
-        elif keys[pygame.K_3]:
+        elif keys[pygame.K_3] and not getattr(self, "prev_key_3", False):
             self.current_weapon = "shotgun"
-        elif keys[pygame.K_4]:
+        elif keys[pygame.K_4] and not getattr(self, "prev_key_4", False):
             self.current_weapon = "sniper"
 
-        # 必殺技（X鍵）
-        if keys[pygame.K_x] and not self.keys_pressed.get("ultimate", False):
+        # 記錄武器切換鍵的前一幀狀態
+        self.prev_key_1 = keys[pygame.K_1]
+        self.prev_key_2 = keys[pygame.K_2]
+        self.prev_key_3 = keys[pygame.K_3]
+        self.prev_key_4 = keys[pygame.K_4]
+
+        # 必殺技（X鍵）- 修正按鍵檢測邏輯
+        ultimate_input = keys[pygame.K_x]
+        if ultimate_input and not self.keys_pressed["ultimate"]:
+            # 按鍵從沒按下變成按下，觸發必殺技
             ultimate_info = self.use_ultimate()
             if ultimate_info:
                 self.pending_ultimate = ultimate_info
-        self.keys_pressed["ultimate"] = keys[pygame.K_x]
+        self.keys_pressed["ultimate"] = ultimate_input
 
     def jump(self):
         """
@@ -561,38 +591,81 @@ class Player(GameObject):
 
     def melee_attack(self):
         """
-        近戰攻擊 - 用槍身進行近距離揮擊\n
+        甩槍攻擊 - 用槍械進行高威力的近距離攻擊\n
         \n
-        近戰攻擊特點：\n
-        1. 攻擊力比子彈高\n
-        2. 有擊退效果\n
-        3. 攻擊範圍有限\n
-        4. 冷卻時間較短\n
+        甩槍攻擊特點：\n
+        1. 攻擊力比對應武器的射擊傷害高2-3.5倍\n
+        2. 有強力的擊退效果（根據武器類型調整）\n
+        3. 攻擊範圍根據武器類型調整\n
+        4. 冷卻時間根據武器威力調整\n
+        \n
+        各武器甩槍特性：\n
+        - 機關槍：傷害25，擊退100，範圍70，冷卻0.8秒\n
+        - 衝鋒槍：傷害120，擊退180，範圍85，冷卻1.2秒\n
+        - 散彈槍：傷害90，擊退220，範圍95，冷卻1.5秒\n
+        - 狙擊槍：傷害200，擊退250，範圍100，冷卻2.0秒\n
+        \n
+        攻擊機制：\n
+        - 使用當前裝備的武器進行甩擊\n
+        - 攻擊範圍為玩家前方的矩形區域\n
+        - 造成高傷害並擊退敵人\n
+        - 適合近距離戰鬥和突破敵人包圍\n
         \n
         回傳:\n
-        dict or None: 攻擊資訊或 None（冷卻中）\n
+        dict or None: 甩槍攻擊資訊或 None（冷卻中）\n
         """
         current_time = time.time()
 
-        # 近戰攻擊的冷卻時間比射擊短
-        melee_cooldown = 0.5  # 0.5秒冷卻
+        # 獲取當前武器的甩槍攻擊配置
+        swing_config = WEAPON_SWING_CONFIGS.get(self.current_weapon)
+        if not swing_config:
+            # 如果沒有找到配置，使用預設值
+            swing_config = {
+                "damage": 120,
+                "knockback": 150,
+                "range": 80,
+                "cooldown": 1.0,
+            }
 
-        if current_time - self.last_melee_time < melee_cooldown:
-            return None  # 還在冷卻中
+        # 移除冷卻時間限制，讓玩家可以連續使用甩槍攻擊
+        # 檢查甩槍攻擊的冷卻時間
+        # if current_time - self.last_melee_time < swing_config["cooldown"]:
+        #     return None  # 還在冷卻中
 
         self.last_melee_time = current_time
 
-        # 計算近戰攻擊範圍（玩家前方的矩形區域）
-        attack_x = self.x + (self.width if self.facing_direction > 0 else -MELEE_RANGE)
+        # 啟動甩槍動畫
+        self.is_melee_attacking = True
+        self.melee_animation_time = 0
+        self.weapon_swing_angle = 0
+
+        # 初始化飛槍動畫
+        self.weapon_flying = True
+        self.weapon_fly_distance = 0
+        self.weapon_spin_angle = 0
+
+        # 計算甩槍攻擊範圍（玩家前方的矩形區域）
+        attack_range = swing_config["range"]
+        attack_x = self.x + (self.width if self.facing_direction > 0 else -attack_range)
         attack_y = self.y
-        attack_width = MELEE_RANGE
+        attack_width = attack_range
         attack_height = self.height
 
         return {
-            "damage": MELEE_DAMAGE,
-            "knockback": MELEE_KNOCKBACK,
+            "success": True,  # 攻擊成功標記
+            "damage": swing_config["damage"],
+            "knockback": swing_config["knockback"],
+            "range": swing_config["range"],  # 新增：攻擊範圍
             "attack_rect": pygame.Rect(attack_x, attack_y, attack_width, attack_height),
             "direction": self.facing_direction,
+            "attack_type": "gun_swing",  # 攻擊類型標記
+            "weapon_type": self.current_weapon,  # 新增：記錄使用的武器類型
+            "weapon_name": {  # 新增：武器名稱對照
+                "machine_gun": "機關槍",
+                "assault_rifle": "突擊步槍",
+                "shotgun": "散彈槍",
+                "sniper": "狙擊槍",
+            }.get(self.current_weapon, "未知武器"),
         }
 
     def use_ultimate(self):
@@ -686,6 +759,9 @@ class Player(GameObject):
         # 更新位置
         self.x += self.velocity_x
         self.y += self.velocity_y
+
+        # 更新甩槍動畫
+        self.update_melee_animation()
 
         # 處理碰撞
         self.handle_collisions(platforms)
@@ -818,6 +894,60 @@ class Player(GameObject):
             self.x = 0
             self.velocity_x = 0
         # 移除右邊界檢查，允許玩家在無限寬度地圖中移動
+
+    def update_melee_animation(self):
+        """
+        更新甩槍攻擊動畫 - 武器飛離玩家、轉圈、然後回來\n
+        \n
+        動畫分為三個階段：\n
+        1. 飛出階段（0-0.4秒）：武器飛離玩家，同時旋轉\n
+        2. 停留階段（0.4-0.8秒）：武器在最遠處旋轉\n
+        3. 回歸階段（0.8-1.2秒）：武器飛回玩家身邊\n
+        \n
+        飛槍動畫原理：\n
+        1. 使用時間分段控制飛行軌跡\n
+        2. 武器持續旋轉營造動感\n
+        3. 距離計算讓武器平滑飛出再飛回\n
+        """
+        if not self.is_melee_attacking:
+            return
+
+        # 更新動畫時間
+        self.melee_animation_time += 1 / 60  # 假設60FPS
+
+        # 計算動畫進度（0到1）
+        progress = min(self.melee_animation_time / self.melee_animation_duration, 1.0)
+
+        # 武器持續旋轉，營造飛行中的動感
+        self.weapon_spin_angle += 12  # 每幀轉12度，很快的旋轉
+        if self.weapon_spin_angle >= 360:
+            self.weapon_spin_angle -= 360
+
+        # 動畫分三個階段：飛出、停留、飛回
+        if progress <= 0.33:  # 飛出階段（前1/3時間）
+            # 武器從玩家身邊飛向最遠點
+            fly_progress = progress / 0.33
+            self.weapon_fly_distance = self.weapon_max_fly_distance * fly_progress
+
+        elif progress <= 0.67:  # 停留階段（中間1/3時間）
+            # 武器在最遠處停留，持續旋轉
+            self.weapon_fly_distance = self.weapon_max_fly_distance
+
+        else:  # 回歸階段（最後1/3時間）
+            # 武器從最遠點飛回玩家身邊
+            return_progress = (progress - 0.67) / 0.33
+            self.weapon_fly_distance = self.weapon_max_fly_distance * (
+                1 - return_progress
+            )
+
+        # 動畫結束檢查
+        if progress >= 1.0:
+            self.is_melee_attacking = False
+            self.melee_animation_time = 0
+            self.weapon_swing_angle = 0
+            self.weapon_flying = False
+            self.weapon_fly_distance = 0
+            self.weapon_spin_angle = 0
 
     def update_status_effects(self):
         """
@@ -1261,9 +1391,26 @@ class Player(GameObject):
             direction_x = world_mouse_x - player_center_x
             direction_y = world_mouse_y - player_center_y
 
-            # 計算角度（弧度轉角度）
-            angle = math.atan2(direction_y, direction_x)
-            angle_degrees = math.degrees(angle) + MACHINE_GUN_ROTATION_OFFSET
+            # 如果在甩槍攻擊中，武器會飛離玩家
+            if self.is_melee_attacking and self.weapon_flying:
+                # 計算武器飛行後的位置
+                fly_direction_x = math.cos(math.radians(self.weapon_spin_angle))
+                fly_direction_y = math.sin(math.radians(self.weapon_spin_angle))
+
+                # 武器飛到指定距離的位置
+                weapon_x = player_center_x + fly_direction_x * self.weapon_fly_distance
+                weapon_y = player_center_y + fly_direction_y * self.weapon_fly_distance
+
+                # 使用旋轉角度作為武器的朝向
+                angle_degrees = self.weapon_spin_angle + MACHINE_GUN_ROTATION_OFFSET
+            else:
+                # 正常情況下，武器在玩家身邊並朝向滑鼠
+                weapon_x = player_center_x
+                weapon_y = player_center_y
+
+                # 計算角度（弧度轉角度）
+                angle = math.atan2(direction_y, direction_x)
+                angle_degrees = math.degrees(angle) + MACHINE_GUN_ROTATION_OFFSET
 
             # 根據角度選擇使用哪個圖片
             if angle_degrees > 90 or angle_degrees < -90:
@@ -1295,7 +1442,7 @@ class Player(GameObject):
 
             # 計算旋轉後圖片的新中心位置（螢幕座標）
             gun_rect = rotated_gun.get_rect()
-            gun_rect.center = (player_center_x - camera_x, player_center_y - camera_y)
+            gun_rect.center = (weapon_x - camera_x, weapon_y - camera_y)
 
             # 繪製旋轉後的機關槍
             screen.blit(rotated_gun, gun_rect)
@@ -1363,9 +1510,26 @@ class Player(GameObject):
             direction_x = world_mouse_x - player_center_x
             direction_y = world_mouse_y - player_center_y
 
-            # 計算角度（弧度轉角度）
-            angle = math.atan2(direction_y, direction_x)
-            angle_degrees = math.degrees(angle) + SNIPER_RIFLE_ROTATION_OFFSET
+            # 如果在甩槍攻擊中，武器會飛離玩家
+            if self.is_melee_attacking and self.weapon_flying:
+                # 計算武器飛行後的位置
+                fly_direction_x = math.cos(math.radians(self.weapon_spin_angle))
+                fly_direction_y = math.sin(math.radians(self.weapon_spin_angle))
+
+                # 武器飛到指定距離的位置
+                weapon_x = player_center_x + fly_direction_x * self.weapon_fly_distance
+                weapon_y = player_center_y + fly_direction_y * self.weapon_fly_distance
+
+                # 使用旋轉角度作為武器的朝向
+                angle_degrees = self.weapon_spin_angle + SNIPER_RIFLE_ROTATION_OFFSET
+            else:
+                # 正常情況下，武器在玩家身邊並朝向滑鼠
+                weapon_x = player_center_x
+                weapon_y = player_center_y
+
+                # 計算角度（弧度轉角度）
+                angle = math.atan2(direction_y, direction_x)
+                angle_degrees = math.degrees(angle) + SNIPER_RIFLE_ROTATION_OFFSET
 
             # 根據角度選擇使用哪個圖片
             if angle_degrees > 90 or angle_degrees < -90:
@@ -1397,7 +1561,7 @@ class Player(GameObject):
 
             # 計算旋轉後圖片的新中心位置（螢幕座標）
             rifle_rect = rotated_rifle.get_rect()
-            rifle_rect.center = (player_center_x - camera_x, player_center_y - camera_y)
+            rifle_rect.center = (weapon_x - camera_x, weapon_y - camera_y)
 
             # 繪製旋轉後的狙擊槍
             screen.blit(rotated_rifle, rifle_rect)
@@ -1466,9 +1630,26 @@ class Player(GameObject):
             direction_x = world_mouse_x - player_center_x
             direction_y = world_mouse_y - player_center_y
 
-            # 計算角度（弧度轉角度）
-            angle = math.atan2(direction_y, direction_x)
-            angle_degrees = math.degrees(angle) + SHOTGUN_ROTATION_OFFSET
+            # 如果在甩槍攻擊中，武器會飛離玩家
+            if self.is_melee_attacking and self.weapon_flying:
+                # 計算武器飛行後的位置
+                fly_direction_x = math.cos(math.radians(self.weapon_spin_angle))
+                fly_direction_y = math.sin(math.radians(self.weapon_spin_angle))
+
+                # 武器飛到指定距離的位置
+                weapon_x = player_center_x + fly_direction_x * self.weapon_fly_distance
+                weapon_y = player_center_y + fly_direction_y * self.weapon_fly_distance
+
+                # 使用旋轉角度作為武器的朝向
+                angle_degrees = self.weapon_spin_angle + SHOTGUN_ROTATION_OFFSET
+            else:
+                # 正常情況下，武器在玩家身邊並朝向滑鼠
+                weapon_x = player_center_x
+                weapon_y = player_center_y
+
+                # 計算角度（弧度轉角度）
+                angle = math.atan2(direction_y, direction_x)
+                angle_degrees = math.degrees(angle) + SHOTGUN_ROTATION_OFFSET
 
             # 根據角度選擇使用哪個圖片
             # 往右射擊正常，所以原圖應該是槍口朝右的
@@ -1493,8 +1674,8 @@ class Player(GameObject):
             # 計算旋轉後圖片的新中心位置（螢幕座標）
             shotgun_rect = rotated_shotgun.get_rect()
             shotgun_rect.center = (
-                player_center_x - camera_x,
-                player_center_y - camera_y,
+                weapon_x - camera_x,
+                weapon_y - camera_y,
             )
 
             # 繪製旋轉後的散彈槍
@@ -1564,9 +1745,26 @@ class Player(GameObject):
             direction_x = world_mouse_x - player_center_x
             direction_y = world_mouse_y - player_center_y
 
-            # 計算角度（弧度轉角度）
-            angle = math.atan2(direction_y, direction_x)
-            angle_degrees = math.degrees(angle) + ASSAULT_RIFLE_ROTATION_OFFSET
+            # 如果在甩槍攻擊中，武器會飛離玩家
+            if self.is_melee_attacking and self.weapon_flying:
+                # 計算武器飛行後的位置
+                fly_direction_x = math.cos(math.radians(self.weapon_spin_angle))
+                fly_direction_y = math.sin(math.radians(self.weapon_spin_angle))
+
+                # 武器飛到指定距離的位置
+                weapon_x = player_center_x + fly_direction_x * self.weapon_fly_distance
+                weapon_y = player_center_y + fly_direction_y * self.weapon_fly_distance
+
+                # 使用旋轉角度作為武器的朝向
+                angle_degrees = self.weapon_spin_angle + ASSAULT_RIFLE_ROTATION_OFFSET
+            else:
+                # 正常情況下，武器在玩家身邊並朝向滑鼠
+                weapon_x = player_center_x
+                weapon_y = player_center_y
+
+                # 計算角度（弧度轉角度）
+                angle = math.atan2(direction_y, direction_x)
+                angle_degrees = math.degrees(angle) + ASSAULT_RIFLE_ROTATION_OFFSET
 
             # 根據角度選擇使用哪個圖片
             # 修正圖片方向：往右打使用B&T_APC_9_K_side_profile.png，往左打使用B&T_APC_9_K_side_profile拷貝.png
@@ -1599,7 +1797,7 @@ class Player(GameObject):
 
             # 計算旋轉後圖片的新中心位置（螢幕座標）
             rifle_rect = rotated_rifle.get_rect()
-            rifle_rect.center = (player_center_x - camera_x, player_center_y - camera_y)
+            rifle_rect.center = (weapon_x - camera_x, weapon_y - camera_y)
 
             # 繪製旋轉後的衝鋒槍
             screen.blit(rotated_rifle, rifle_rect)

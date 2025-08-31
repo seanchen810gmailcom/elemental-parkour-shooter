@@ -124,10 +124,25 @@ class ElementalParkourShooter:
             print(f"載入愛心道具音效失敗: {e}")
             print("愛心道具將在沒有音效的情況下顯示")
 
+        # 載入Boss背景音樂
+        self.boss_music = None
+        try:
+            self.boss_music = pygame.mixer.Sound(BOSS_MUSIC_PATH)
+            self.boss_music.set_volume(BOSS_MUSIC_VOLUME)
+            print(f"成功載入Boss背景音樂: {BOSS_MUSIC_PATH}")
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"載入Boss背景音樂失敗: {e}")
+            print("Boss將在沒有背景音樂的情況下出現")
+
         # 音樂播放狀態管理
         self.is_sniper_music_playing = False
         self.sniper_music_channel = None
         self.sniper_music_channels = []  # 多重播放頻道列表
+
+        # Boss音樂管理
+        self.boss_music_channel = None
+        self.is_boss_music_playing = False
+        self.boss_music_fade_duration = 1.0  # 漸弱持續時間（秒）
 
         # 建立遊戲視窗
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -184,6 +199,153 @@ class ElementalParkourShooter:
             0, min(target_camera_y, self.level_manager.level_height - SCREEN_HEIGHT)
         )
 
+    def handle_melee_bullet_deflection(self):
+        """
+        甩槍攔截敵方子彈 - 在甩槍攻擊時擋掉範圍內的敵方子彈\n
+        \n
+        檢查甩槍攻擊範圍內是否有敵方子彈，如果有就把它們移除\n
+        甩槍範圍使用目前裝備武器的攻擊距離來決定\n
+        \n
+        影響:\n
+        - 移除攔截到的熔岩球和水彈\n
+        - 產生視覺回饋（可能的爆炸效果）\n
+        """
+        # 取得目前武器的攻擊範圍，決定甩槍能擋多遠的子彈
+        # 根據不同武器類型設定不同的擋彈範圍
+        deflection_ranges = {
+            "machine_gun": 80,
+            "assault_rifle": 90,
+            "shotgun": 100,
+            "sniper": 120,
+        }
+        deflection_range = deflection_ranges.get(self.player.current_weapon, 80)
+
+        # 計算甩槍的圓形防護區域（以玩家為中心）
+        player_center_x = self.player.x + self.player.width // 2
+        player_center_y = self.player.y + self.player.height // 2
+
+        # 檢查所有怪物的子彈，看看有沒有飛進甩槍範圍
+        for monster in self.monster_manager.monsters:
+            # 擋掉熔岩球 - 從後面開始檢查，這樣移除時不會搞亂索引
+            if hasattr(monster, "lava_balls"):  # 確保怪物有熔岩球系統
+                for i in range(len(monster.lava_balls) - 1, -1, -1):
+                    lava_ball = monster.lava_balls[i]
+
+                    # 算出熔岩球跟玩家的距離
+                    distance = (
+                        (lava_ball["x"] - player_center_x) ** 2
+                        + (lava_ball["y"] - player_center_y) ** 2
+                    ) ** 0.5
+
+                    # 如果熔岩球進入甩槍範圍就擋掉
+                    if distance <= deflection_range:
+                        monster.lava_balls.pop(i)  # 把熔岩球從遊戲中移除
+
+            # 擋掉水彈 - 同樣從後面開始檢查
+            if hasattr(monster, "water_bullets"):  # 確保怪物有水彈系統
+                for i in range(len(monster.water_bullets) - 1, -1, -1):
+                    water_bullet = monster.water_bullets[i]
+
+                    # 算出水彈跟玩家的距離
+                    distance = (
+                        (water_bullet[0] - player_center_x) ** 2
+                        + (water_bullet[1] - player_center_y) ** 2
+                    ) ** 0.5
+
+                    # 如果水彈進入甩槍範圍就擋掉
+                    if distance <= deflection_range:
+                        monster.water_bullets.pop(i)  # 把水彈從遊戲中移除
+
+    def handle_weapon_spin_collision(self):
+        """
+        處理武器轉動時與怪物的碰撞 - 當槍還在轉時怪物被碰到會被擊退並扣血\n
+        \n
+        功能：\n
+        1. 檢查旋轉中的武器是否碰到怪物\n
+        2. 對碰到的怪物造成90點傷害\n
+        3. 產生強力的擊退效果\n
+        4. 防止同一次攻擊重複傷害同一怪物\n
+        \n
+        碰撞範圍：\n
+        - 以玩家為中心計算武器旋轉位置\n
+        - 根據武器飛行距離確定攻擊範圍\n
+        - 使用圓形碰撞檢測確保精確判定\n
+        """
+        if not hasattr(self.player, "weapon_hit_monsters"):
+            # 初始化已攻擊怪物記錄，防止重複傷害
+            self.player.weapon_hit_monsters = set()
+
+        # 如果這是新的攻擊，清空之前的記錄
+        if self.player.melee_animation_time == 0:
+            self.player.weapon_hit_monsters.clear()
+
+        # 計算武器當前位置（基於玩家位置和武器飛行距離）
+        player_center_x = self.player.x + self.player.width // 2
+        player_center_y = self.player.y + self.player.height // 2
+
+        # 根據武器旋轉角度計算武器位置
+        weapon_angle_radians = math.radians(self.player.weapon_spin_angle)
+        weapon_x = (
+            player_center_x
+            + math.cos(weapon_angle_radians) * self.player.weapon_fly_distance
+        )
+        weapon_y = (
+            player_center_y
+            + math.sin(weapon_angle_radians) * self.player.weapon_fly_distance
+        )
+
+        # 武器攻擊範圍（武器大小）
+        weapon_attack_radius = 40  # 武器攻擊範圍半徑
+
+        # 檢查所有怪物是否被武器碰到
+        for monster in self.monster_manager.monsters:
+            # 避免對同一怪物重複攻擊
+            if id(monster) in self.player.weapon_hit_monsters:
+                continue
+
+            # 計算怪物中心位置
+            monster_center_x = monster.x + monster.width // 2
+            monster_center_y = monster.y + monster.height // 2
+
+            # 計算武器與怪物的距離
+            distance = math.sqrt(
+                (weapon_x - monster_center_x) ** 2 + (weapon_y - monster_center_y) ** 2
+            )
+
+            # 檢查是否在攻擊範圍內
+            if distance <= weapon_attack_radius:
+                # 記錄已攻擊的怪物，避免重複傷害
+                self.player.weapon_hit_monsters.add(id(monster))
+
+                # 對怪物造成傷害
+                if hasattr(monster, "take_damage"):
+                    monster.take_damage(90)  # 造成90點傷害
+                    print(f"🌪️ 旋轉武器擊中怪物！造成90點傷害")
+
+                # 計算擊退方向（從武器位置推向怪物）
+                if distance > 0:
+                    knockback_direction_x = (monster_center_x - weapon_x) / distance
+                    knockback_direction_y = (monster_center_y - weapon_y) / distance
+                else:
+                    # 如果距離為0，使用預設方向
+                    knockback_direction_x = self.player.facing_direction
+                    knockback_direction_y = 0
+
+                # 施加擊退效果
+                knockback_force = 200  # 強力擊退
+                if hasattr(monster, "apply_knockback"):
+                    monster.apply_knockback(knockback_force, knockback_direction_x)
+                elif hasattr(monster, "velocity_x"):
+                    # 如果怪物沒有 apply_knockback 方法，直接修改速度
+                    monster.velocity_x += knockback_direction_x * knockback_force
+                    if hasattr(monster, "velocity_y"):
+                        monster.velocity_y += (
+                            knockback_direction_y * knockback_force * 0.5
+                        )  # 輕微向上擊飛
+
+                # 增加分數
+                self.score += 25  # 旋轉攻擊額外分數
+
     def handle_events(self):
         """
         處理所有遊戲事件 - 滑鼠點擊、鍵盤按鍵、視窗關閉等\n
@@ -201,11 +363,74 @@ class ElementalParkourShooter:
                     # 按 ESC 鍵離開遊戲
                     self.running = False
                 elif event.key == pygame.K_r:
-                    # 按 R 鍵重新開始遊戲
+                    # 按 R 鍵重新開始遊戲 - 修正重新開始邏輯
                     if self.game_state in ["game_over", "victory", "death_screen"]:
                         self.reset_game()
+                        print("🔄 玩家按下 R 鍵，遊戲重新開始")
 
-        # 處理連續按鍵和滑鼠輸入
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                # 處理滑鼠點擊事件 - 只在遊戲進行時處理
+                if self.game_state == "playing" and self.player.is_alive:
+                    if event.button == 3:  # 右鍵點擊
+                        # 執行甩槍攻擊
+                        attack_result = self.player.melee_attack()
+                        if attack_result and attack_result.get("success"):
+                            print(
+                                f"🥊 {attack_result.get('weapon_name', '武器')}甩槍攻擊！"
+                            )
+
+                            # 檢查攻擊是否命中怪物
+                            attack_x = self.player.x
+                            attack_y = self.player.y
+                            attack_range = attack_result.get("range", 80)
+                            attack_damage = attack_result.get("damage", 120)
+                            attack_knockback = attack_result.get("knockback", 150)
+
+                            # 計算攻擊範圍內的怪物
+                            hit_monsters = []
+                            for monster in self.monster_manager.monsters:
+                                distance = (
+                                    (monster.x - attack_x) ** 2
+                                    + (monster.y - attack_y) ** 2
+                                ) ** 0.5
+                                if distance <= attack_range:
+                                    hit_monsters.append(monster)
+
+                            # 對範圍內的怪物造成傷害
+                            for monster in hit_monsters:
+                                monster.take_damage(
+                                    attack_damage, "melee"
+                                )  # 標記為甩槍攻擊
+
+                                # 計算擊退方向
+                                dx = monster.x - attack_x
+                                dy = monster.y - attack_y
+                                distance = (dx**2 + dy**2) ** 0.5
+                                if distance > 0:
+                                    dx /= distance
+                                    dy /= distance
+                                    monster.velocity_x = dx * attack_knockback
+                                    monster.velocity_y = dy * attack_knockback
+
+                                # 顯示傷害數字
+                                self.damage_display.add_damage_number(
+                                    monster.x, monster.y - 20, attack_damage
+                                )
+
+                                print(
+                                    f"💥 {attack_result.get('weapon_name', '武器')}甩槍攻擊命中怪物，造成 {attack_damage} 點傷害！"
+                                )
+
+                                # 檢查怪物是否死亡
+                                if monster.health <= 0:
+                                    self.score += monster.score_value
+                                    print(
+                                        f"💀 怪物被甩槍攻擊擊敗！得分 +{monster.score_value}"
+                                    )
+                        else:
+                            print("🔄 甩槍攻擊冷卻中...")
+
+        # 處理連續按鍵和滑鼠輸入 - 確保只在遊戲進行時處理
         if self.game_state == "playing" and self.player.is_alive:
             keys = pygame.key.get_pressed()
             mouse_buttons = pygame.mouse.get_pressed()
@@ -240,6 +465,7 @@ class ElementalParkourShooter:
                 ):
                     # 玩家死亡且沒有剩餘生命次數，進入遊戲結束狀態
                     self.play_game_over_sound()  # 播放死亡音效
+                    self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
                     self.game_state = "game_over"
                     self.game_over_time = time.time()
                     print("💀 遊戲結束！")
@@ -297,8 +523,27 @@ class ElementalParkourShooter:
                     hit_monsters = self.weapon_manager.handle_melee_attack(
                         melee_info, self.monster_manager.monsters
                     )
+
                     # 每擊中一個怪物得20分
                     self.score += len(hit_monsters) * 20
+
+                    # 根據武器類型顯示甩槍攻擊資訊
+                    if hit_monsters:
+                        weapon_names = {
+                            "machine_gun": "機關槍",
+                            "assault_rifle": "衝鋒槍",
+                            "shotgun": "散彈槍",
+                            "sniper": "狙擊槍",
+                        }
+                        weapon_name = weapon_names.get(
+                            melee_info.get("weapon_type", "unknown"), "未知武器"
+                        )
+                        damage = melee_info.get("damage", 0)
+                        print(
+                            f"🔨 {weapon_name}甩擊命中 {len(hit_monsters)} 個目標！傷害: {damage}"
+                        )
+                    else:
+                        print("🔨 甩槍攻擊發動但未命中目標")
 
             elif self.player.is_dead:
                 # 玩家死亡但還有生命次數，進入死亡畫面
@@ -306,6 +551,7 @@ class ElementalParkourShooter:
                     # 只在剛進入死亡狀態時播放音效，避免重複播放
                     if self.game_state != "death_screen":
                         self.play_game_over_sound()  # 播放死亡音效
+                        self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
                     self.game_state = "death_screen"
                     self.game_over_time = time.time()
                     print(f"💀 玩家死亡！剩餘生命次數: {self.player.lives}")
@@ -313,6 +559,7 @@ class ElementalParkourShooter:
                     # 沒有剩餘生命次數，遊戲結束
                     if self.game_state != "game_over":
                         self.play_game_over_sound()  # 播放死亡音效
+                        self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
                     self.game_state = "game_over"
                     self.game_over_time = time.time()
                     print("💀 遊戲結束！沒有剩餘生命次數")
@@ -349,6 +596,14 @@ class ElementalParkourShooter:
                 self.player, platforms, dt, bullets, level_width
             )
 
+            # 甩槍攔截怪物子彈 - 檢查甩槍攻擊是否能擋下敵方子彈
+            if self.player.is_melee_attacking:
+                self.handle_melee_bullet_deflection()
+
+            # 武器轉動時的怪物碰撞檢測 - 檢查轉動中的武器是否碰到怪物
+            if self.player.is_melee_attacking and self.player.weapon_flying:
+                self.handle_weapon_spin_collision()
+
             # 根據怪物擊殺數增加分數
             if monster_update_result["monsters_killed"] > 0:
                 self.score += monster_update_result["monsters_killed"] * 50
@@ -356,15 +611,22 @@ class ElementalParkourShooter:
             # 檢查Boss生成
             if monster_update_result["boss_spawned"]:
                 print("🔥 強大的Boss出現了！")
+                # 開始播放Boss背景音樂
+                self.start_boss_music()
+
+            # 更新Boss音樂狀態（檢查是否需要重新播放）
+            self.update_boss_music_status()
 
             # 管理狙擊怪來襲音樂
             self.manage_sniper_incoming_music()
 
             # 檢查Boss是否被擊敗
             if monster_update_result["boss_defeated"]:
-                # 停止狙擊怪來襲音樂（如果在播放）
-                if self.is_sniper_music_playing:
-                    self.stop_sniper_incoming_music()
+                # 停止Boss背景音樂（漸弱效果）
+                self.stop_boss_music_with_fade()
+
+                # 強制停止狙擊怪來襲音樂（大怪來襲.wav）
+                self.stop_sniper_incoming_music()
 
                 # 只有狙擊Boss被擊敗時才生成勝利星星
                 if monster_update_result.get("sniper_boss_defeated", False):
@@ -428,9 +690,29 @@ class ElementalParkourShooter:
             self.damage_display.update()
 
         elif self.game_state == "death_screen":
-            # 死亡畫面狀態 - 等待玩家按 R 重新開始
-            # 這個狀態不需要更新遊戲邏輯，只是等待玩家輸入
-            pass
+            # 死亡畫面狀態 - 等待玩家按 R 重新開始或檢查是否可以自動重生
+            # 檢查是否按了 R 鍵來立即重生
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_r] and self.player.can_respawn():
+                # 立即重生
+                if self.player.respawn():
+                    self.game_state = "playing"
+                    print("🔄 玩家手動重生成功")
+                else:
+                    # 重生失敗，進入遊戲結束狀態
+                    self.game_state = "game_over"
+                    self.game_over_time = time.time()
+                    print("💀 重生失敗，遊戲結束")
+            elif self.player.can_respawn():
+                # 死亡延遲時間已過，自動重生
+                if self.player.respawn():
+                    self.game_state = "playing"
+                    print("🔄 玩家自動重生成功")
+                else:
+                    # 重生失敗，進入遊戲結束狀態
+                    self.game_state = "game_over"
+                    self.game_over_time = time.time()
+                    print("💀 自動重生失敗，遊戲結束")
 
     def play_shooting_sound(self, damage=30):
         """
@@ -678,6 +960,10 @@ class ElementalParkourShooter:
         # 停止狙擊怪來襲音樂（如果正在播放）
         if self.is_sniper_music_playing:
             self.stop_sniper_incoming_music()
+
+        # 停止Boss背景音樂（如果正在播放）
+        if self.is_boss_music_playing:
+            self.stop_boss_music_with_fade()
 
         # 重置遊戲狀態
         self.game_state = "playing"
@@ -980,6 +1266,74 @@ class ElementalParkourShooter:
 
         # 更新整個螢幕顯示
         pygame.display.flip()
+
+    def start_boss_music(self):
+        """
+        開始播放Boss背景音樂，支持循環播放
+        """
+        if not self.boss_music or self.is_boss_music_playing:
+            return
+
+        try:
+            # 如果有其他音樂在播放，停止它們
+            if self.is_sniper_music_playing:
+                self.stop_sniper_music()
+
+            # 播放Boss音樂，使用-1表示無限循環
+            self.boss_music_channel = pygame.mixer.find_channel()
+            if self.boss_music_channel:
+                self.boss_music_channel.play(self.boss_music, loops=-1)
+                self.is_boss_music_playing = True
+                print("🎵 Boss背景音樂開始播放（循環）")
+
+        except Exception as e:
+            print(f"播放Boss音樂時發生錯誤: {e}")
+
+    def stop_boss_music_with_fade(self):
+        """
+        以漸弱效果停止Boss背景音樂
+        """
+        if not self.is_boss_music_playing or not self.boss_music_channel:
+            return
+
+        try:
+            # 使用pygame的fadeout功能實現漸弱效果
+            fade_time_ms = int(self.boss_music_fade_duration * 1000)  # 轉換為毫秒
+            self.boss_music_channel.fadeout(fade_time_ms)
+
+            self.is_boss_music_playing = False
+            self.boss_music_channel = None
+            print(f"🎵 Boss背景音樂以 {self.boss_music_fade_duration} 秒漸弱停止")
+
+        except Exception as e:
+            print(f"停止Boss音樂時發生錯誤: {e}")
+
+    def update_boss_music_status(self):
+        """
+        更新Boss音樂播放狀態，檢查是否需要重新播放
+        """
+        if self.is_boss_music_playing and self.boss_music_channel:
+            # 檢查音樂是否還在播放
+            if not self.boss_music_channel.get_busy():
+                print("🎵 Boss音樂播放結束，準備重新播放")
+                self.is_boss_music_playing = False
+                self.boss_music_channel = None
+
+                # 如果還有Boss存在，重新開始播放音樂
+                if self.monster_manager.boss and self.monster_manager.boss.is_alive:
+                    self.start_boss_music()
+
+    def stop_sniper_music(self):
+        """
+        停止狙擊怪音樂播放
+        """
+        if self.is_sniper_music_playing:
+            for channel in self.sniper_music_channels:
+                if channel and channel.get_busy():
+                    channel.stop()
+            self.sniper_music_channels.clear()
+            self.is_sniper_music_playing = False
+            print("🎵 狙擊怪音樂已停止")
 
     def run(self):
         """

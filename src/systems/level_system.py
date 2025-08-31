@@ -671,13 +671,45 @@ class LevelManager:
             damage = spike.check_collision(player)
             if damage > 0:
                 total_spike_damage += damage
+
+                # 計算尖刺中心與玩家中心的方向
+                spike_center_x = spike.x + spike.width // 2
+                spike_center_y = spike.y + spike.height // 2
+                player_center_x = player.x + player.width // 2
+                player_center_y = player.y + player.height // 2
+
+                # 計算反彈方向
+                dx = player_center_x - spike_center_x
+                dy = player_center_y - spike_center_y
+                distance = math.sqrt(dx**2 + dy**2)
+
+                if distance > 0:
+                    # 正規化方向向量
+                    dx /= distance
+                    dy /= distance
+
+                    # 給玩家溫和的反彈效果（根據尖刺大小調整）
+                    # 尖刺寬度30-60，高度30，所以水平彈開45像素，垂直彈開30像素
+                    horizontal_knockback = 45  # 接近尖刺平均寬度
+                    vertical_knockback = -30  # 等於尖刺高度
+
+                    player.velocity_x = dx * horizontal_knockback  # 水平反彈
+                    player.velocity_y = min(
+                        vertical_knockback, dy * horizontal_knockback
+                    )  # 向上跳開
+
+                    print(f"🔺 踩到尖刺！受到 {total_spike_damage} 點傷害並輕微彈開")
+                else:
+                    # 如果沒有方向，預設向上跳開（輕微）
+                    player.velocity_y = -30  # 等於尖刺高度
+                    print(f"🔺 踩到尖刺！受到 {total_spike_damage} 點傷害並向上彈開")
+
                 # 給玩家一個短暫的無敵時間，避免連續受傷
                 break  # 只計算第一個碰撞的尖刺傷害
 
         # 如果受到尖刺傷害，扣除玩家生命值
         if total_spike_damage > 0:
             player.take_damage(total_spike_damage)
-            print(f"🔺 踩到尖刺！受到 {total_spike_damage} 點傷害")
 
         # 檢查玩家是否收集到星星
         if self.check_star_collision(player):

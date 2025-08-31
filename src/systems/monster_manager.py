@@ -2,7 +2,6 @@
 import pygame
 import random
 import time
-import math
 
 # 支援直接執行和模組執行兩種方式
 try:
@@ -65,39 +64,105 @@ class MonsterManager:
 
         return ground_platform
 
-    def get_spawn_position(self, platforms):
+    def get_spawn_position(self, platforms, player):
         """
-        獲取安全的怪物生成位置（只在最下層地面平台）\n
+        獲取安全的怪物生成位置（在玩家視窗範圍內但不在玩家身上）\n
         \n
         參數:\n
         platforms (list): 平台列表\n
+        player (Player): 玩家物件，用於計算視窗範圍\n
         \n
         回傳:\n
         tuple: (x, y, platform) 座標和平台物件，如果找不到安全位置回傳 None\n
         """
-        # 只在地面平台生成怪物
-        ground_platform = self.get_ground_platform(platforms)
+        # 計算玩家當前視窗範圍
+        player_center_x = player.x + player.width // 2
+        player_center_y = player.y + player.height // 2
 
-        if ground_platform is None:
+        # 視窗範圍（以玩家為中心）
+        view_left = player_center_x - SCREEN_WIDTH // 2
+        view_right = player_center_x + SCREEN_WIDTH // 2
+        view_top = player_center_y - SCREEN_HEIGHT // 2
+        view_bottom = player_center_y + SCREEN_HEIGHT // 2
+
+        # 玩家安全距離（怪物不能在玩家太近的地方出生）
+        safe_distance = 100
+
+        # 在視窗範圍內尋找合適的平台
+        suitable_platforms = []
+
+        for platform in platforms:
+            # 檢查平台是否在視窗範圍內
+            platform_in_view = (
+                platform.x + platform.width > view_left
+                and platform.x < view_right
+                and platform.y + platform.height > view_top
+                and platform.y < view_bottom
+            )
+
+            if platform_in_view and platform.width >= 80:  # 確保平台夠大
+                suitable_platforms.append(platform)
+
+        # 如果沒有合適的平台，回傳 None
+        if not suitable_platforms:
             return None
 
-        # 在地面平台上隨機選擇位置，確保怪物不會掉下去
-        margin = 50  # 距離平台邊緣的安全距離
-        monster_width = 50  # 怪物寬度
+        # 嘗試在合適平台上找到安全的生成點
+        max_attempts = 10
+        for _ in range(max_attempts):
+            # 隨機選擇一個平台
+            platform = random.choice(suitable_platforms)
 
-        # 計算安全的生成範圍
-        min_x = int(ground_platform.x + margin)
-        max_x = int(ground_platform.x + ground_platform.width - margin - monster_width)
+            # 在平台上隨機選擇位置
+            margin = 30  # 距離平台邊緣的安全距離
+            monster_width = 50  # 怪物寬度
 
-        # 確保範圍有效
-        if max_x <= min_x:
-            # 如果平台太小，就在平台中央生成
-            spawn_x = int(ground_platform.x + ground_platform.width // 2)
-        else:
-            spawn_x = random.randint(min_x, max_x)
-        spawn_y = ground_platform.y - 60  # 在平台上方生成
+            # 計算安全的生成範圍
+            min_x = int(platform.x + margin)
+            max_x = int(platform.x + platform.width - margin - monster_width)
 
-        return (spawn_x, spawn_y, ground_platform)
+            # 確保範圍有效
+            if max_x <= min_x:
+                # 如果平台太小，就在平台中央生成
+                spawn_x = int(platform.x + platform.width // 2)
+            else:
+                spawn_x = random.randint(min_x, max_x)
+
+            spawn_y = platform.y - 60  # 在平台上方生成
+
+            # 檢查是否離玩家夠遠
+            dx = spawn_x - player_center_x
+            dy = spawn_y - player_center_y
+            distance_to_player = (
+                dx * dx + dy * dy
+            ) ** 0.5  # 使用簡單的開根號避免依賴math
+
+            if distance_to_player >= safe_distance:
+                return (spawn_x, spawn_y, platform)
+
+        # 如果找不到安全距離的位置，就選擇最遠的平台
+        if suitable_platforms:
+            farthest_platform = None
+            max_distance = 0
+
+            for platform in suitable_platforms:
+                platform_center_x = platform.x + platform.width // 2
+                platform_center_y = platform.y
+
+                dx = platform_center_x - player_center_x
+                dy = platform_center_y - player_center_y
+                distance = (dx * dx + dy * dy) ** 0.5  # 使用簡單的開根號避免依賴math
+
+                if distance > max_distance:
+                    max_distance = distance
+                    farthest_platform = platform
+
+            if farthest_platform:
+                spawn_x = int(farthest_platform.x + farthest_platform.width // 2)
+                spawn_y = farthest_platform.y - 60
+                return (spawn_x, spawn_y, farthest_platform)
+
+        return None
 
     def spawn_monster(self, platforms, player):
         """
@@ -105,6 +170,7 @@ class MonsterManager:
         \n
         參數:\n
         platforms (list): 平台列表\n
+        player (Player): 玩家物件\n
         \n
         回傳:\n
         Monster or None: 新生成的怪物，失敗時回傳 None\n
@@ -112,8 +178,8 @@ class MonsterManager:
         if len(self.monsters) >= self.max_monsters:
             return None
 
-        # 獲取生成位置
-        spawn_result = self.get_spawn_position(platforms)
+        # 獲取生成位置（傳入player參數）
+        spawn_result = self.get_spawn_position(platforms, player)
         if spawn_result is None:
             return None
 
@@ -203,8 +269,8 @@ class MonsterManager:
         回傳:\n
         bool: True 表示應該生成Boss\n
         """
-        # Boss必須等玩家擊敗3個小怪後才能出現（測試用，原本為10個）
-        if self.monsters_killed < 3:
+        # Boss必須等玩家擊敗10個小怪後才能出現
+        if self.monsters_killed < 10:
             return False
 
         # 第一階段：岩漿Boss
@@ -221,12 +287,13 @@ class MonsterManager:
 
         return False
 
-    def spawn_boss(self, platforms):
+    def spawn_boss(self, platforms, player):
         """
         生成Boss怪物 - 根據階段生成不同Boss\n
         \n
         參數:\n
         platforms (list): 平台列表\n
+        player (Player): 玩家物件\n
         \n
         回傳:\n
         Boss or None: 新生成的Boss，失敗時回傳 None\n
@@ -235,7 +302,7 @@ class MonsterManager:
             return None
 
         # 獲取Boss生成位置（在較大的平台上）
-        spawn_result = self.get_spawn_position(platforms)
+        spawn_result = self.get_spawn_position(platforms, player)
         if spawn_result is None:
             return None
 
@@ -297,7 +364,7 @@ class MonsterManager:
             print(f"🎯 最終Boss - 狙擊Boss已生成！具備追蹤子彈、震波攻擊和躲避能力！")
 
             # 狙擊Boss出現時同時生成3個額外小怪
-            self.spawn_additional_monsters_for_sniper_boss(platforms)
+            self.spawn_additional_monsters_for_sniper_boss(platforms, player)
 
         # 共同Boss設定
         self.boss.is_boss = True
@@ -306,38 +373,68 @@ class MonsterManager:
 
         return self.boss
 
-    def spawn_additional_monsters_for_sniper_boss(self, platforms):
+    def spawn_additional_monsters_for_sniper_boss(self, platforms, player):
         """
-        為狙擊Boss生成3個額外的小怪\n
+        為狙擊Boss清除多餘小怪並保留3個小怪\n
         \n
         參數:\n
         platforms (list): 平台列表\n
+        player (Player): 玩家物件\n
         """
-        additional_monsters_count = 3
-        spawned_count = 0
+        # 先統計當前活著的小怪數量
+        alive_monsters = [monster for monster in self.monsters if monster.is_alive]
+        current_monster_count = len(alive_monsters)
+        
+        print(f"🎯 狙擊Boss出現前，場上有 {current_monster_count} 個小怪")
+        
+        # 如果小怪數量超過3個，只保留3個，其餘移除
+        if current_monster_count > 3:
+            # 隨機選擇3個小怪保留，其他的標記為死亡
+            monsters_to_keep = random.sample(alive_monsters, 3)
+            
+            # 將不在保留清單中的小怪標記為死亡
+            removed_count = 0
+            for monster in alive_monsters:
+                if monster not in monsters_to_keep:
+                    monster.is_alive = False
+                    removed_count += 1
+            
+            print(f"🧹 移除了 {removed_count} 個小怪，保留 3 個小怪")
+        
+        # 如果小怪數量不足3個，補充到3個
+        elif current_monster_count < 3:
+            needed_monsters = 3 - current_monster_count
+            spawned_count = 0
+            
+            for _ in range(needed_monsters):
+                # 獲取生成位置
+                spawn_result = self.get_spawn_position(platforms, player)
+                if spawn_result is None:
+                    continue
 
-        for _ in range(additional_monsters_count):
-            # 獲取生成位置
-            spawn_result = self.get_spawn_position(platforms)
-            if spawn_result is None:
-                continue
+                spawn_x, spawn_y, platform = spawn_result
 
-            spawn_x, spawn_y, platform = spawn_result
+                # 隨機選擇怪物類型
+                monster_class = random.choice(self.monster_types)
+                new_monster = monster_class(spawn_x, spawn_y)
 
-            # 隨機選擇怪物類型
-            monster_class = random.choice(self.monster_types)
-            new_monster = monster_class(spawn_x, spawn_y)
+                # 設定怪物所在平台
+                new_monster.home_platform = platform
 
-            # 設定怪物所在平台
-            new_monster.home_platform = platform
+                # 根據波次調整怪物屬性
+                self.adjust_monster_stats(new_monster)
 
-            # 根據波次調整怪物屬性
-            self.adjust_monster_stats(new_monster)
-
-            self.monsters.append(new_monster)
-            spawned_count += 1
-
-        print(f"🎯 狙擊Boss出現時額外生成了 {spawned_count} 個小怪！")
+                self.monsters.append(new_monster)
+                spawned_count += 1
+            
+            print(f"➕ 補充了 {spawned_count} 個小怪")
+        
+        else:
+            print(f"✅ 場上剛好有 3 個小怪，無需調整")
+        
+        # 最終確認
+        final_alive_count = len([monster for monster in self.monsters if monster.is_alive])
+        print(f"🎯 狙擊Boss出現後，場上確保有 {final_alive_count} 個小怪！")
 
     def update(self, player, platforms, dt, bullets=None, level_width=None):
         """
@@ -375,7 +472,7 @@ class MonsterManager:
         # 檢查是否需要生成Boss
         boss_spawned = False
         if self.check_boss_spawn_condition():
-            new_boss = self.spawn_boss(platforms)
+            new_boss = self.spawn_boss(platforms, player)
             if new_boss:
                 boss_spawned = True
 
@@ -417,9 +514,9 @@ class MonsterManager:
                 self.waiting_for_boss_transition = False
                 print(f"⏰ Boss轉換延遲結束，狙擊Boss可以生成了！")
 
-        # 更新生成計時器並嘗試生成新怪物（如果沒有Boss）
+        # 更新生成計時器並嘗試生成新怪物（Boss存在時也繼續生成普通怪物）
         new_monster = None
-        if not self.boss_spawned and self.update_spawn_timer(dt):
+        if self.update_spawn_timer(dt):
             new_monster = self.spawn_monster(platforms, player)
 
         return {
@@ -527,7 +624,7 @@ class MonsterManager:
 
         dx = target_x - start_x
         dy = target_y - start_y
-        distance = math.sqrt(dx**2 + dy**2)
+        distance = (dx**2 + dy**2) ** 0.5
 
         if distance > 0:
             direction_x = dx / distance
@@ -577,7 +674,7 @@ class MonsterManager:
 
         dx = target_x - start_x
         dy = target_y - start_y
-        distance = math.sqrt(dx**2 + dy**2)
+        distance = (dx**2 + dy**2) ** 0.5
 
         if distance > 0:
             direction_x = dx / distance
@@ -660,7 +757,7 @@ class MonsterManager:
             # 計算與玩家的距離
             dx = player.x - self.boss.x
             dy = player.y - self.boss.y
-            distance = math.sqrt(dx**2 + dy**2)
+            distance = (dx**2 + dy**2) ** 0.5
 
             # 如果玩家在合適的距離內，發射火焰子彈
             if 80 <= distance <= 250:  # 火焰子彈的有效攻擊範圍
@@ -688,7 +785,7 @@ class MonsterManager:
             # 計算朝向目標的方向
             dx = bullet["target_x"] - bullet["x"]
             dy = bullet["target_y"] - bullet["y"]
-            distance = math.sqrt(dx**2 + dy**2)
+            distance = (dx**2 + dy**2) ** 0.5
 
             if distance > 0:
                 # 計算新的追蹤方向
@@ -730,7 +827,7 @@ class MonsterManager:
             # 計算與玩家的距離
             dx = player.x - self.boss.x
             dy = player.y - self.boss.y
-            distance = math.sqrt(dx**2 + dy**2)
+            distance = (dx**2 + dy**2) ** 0.5
 
             # 如果玩家在攻擊範圍內，發射追蹤子彈
             if distance <= 300:  # 狙擊Boss的攻擊範圍

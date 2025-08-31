@@ -74,9 +74,37 @@ ICE_DAMAGE = 20
 THUNDER_DAMAGE = 30
 FIRE_DAMAGE = 35
 
-# 近戰攻擊設定
-MELEE_DAMAGE = 40
-MELEE_KNOCKBACK = 100
+# 甩槍攻擊設定 - 四種武器的甩槍攻擊配置
+MELEE_DAMAGE = 120  # 基礎甩槍攻擊力（已棄用，現在使用武器特定設定）
+MELEE_KNOCKBACK = 150  # 基礎擊退效果（已棄用，現在使用武器特定設定）
+
+# 各武器甩槍攻擊特性 - 攻擊力比射擊更強，但冷卻時間較長
+WEAPON_SWING_CONFIGS = {
+    "machine_gun": {
+        "damage": 25,  # 機關槍甩擊：攻擊力是射擊的3倍（8 x 3 = 24，調整為25）
+        "knockback": 100,  # 中等擊退力
+        "range": 70,  # 攻擊範圍較小
+        "cooldown": 0.8,  # 冷卻時間較短
+    },
+    "assault_rifle": {
+        "damage": 120,  # 衝鋒槍甩擊：攻擊力是射擊的3倍（40 x 3 = 120）
+        "knockback": 180,  # 強力擊退
+        "range": 85,  # 攻擊範圍中等
+        "cooldown": 1.2,  # 冷卻時間中等
+    },
+    "shotgun": {
+        "damage": 90,  # 散彈槍甩擊：攻擊力是射擊的3.5倍（25 x 3.6 = 90）
+        "knockback": 220,  # 最強擊退力（散彈槍本身就是近戰武器）
+        "range": 95,  # 攻擊範圍最大
+        "cooldown": 1.5,  # 冷卻時間較長
+    },
+    "sniper": {
+        "damage": 200,  # 狙擊槍甩擊：攻擊力是射擊的2.2倍（90 x 2.2 = 198，調整為200）
+        "knockback": 250,  # 超強擊退力（狙擊槍重量大）
+        "range": 100,  # 攻擊範圍最大（槍最長）
+        "cooldown": 2.0,  # 冷卻時間最長
+    },
+}
 
 ######################怪物設定######################
 
@@ -375,7 +403,10 @@ LAVA_BOSS_IMAGE_SIZE = (
     LAVA_TORNADO_BOSS_WIDTH,
     LAVA_TORNADO_BOSS_HEIGHT,
 )  # 岩漿Boss圖片大小（放大到Boss尺寸）
-SNIPER_BOSS_IMAGE_SIZE = (SNIPER_BOSS_WIDTH, SNIPER_BOSS_HEIGHT)  # 狙擊Boss圖片大小（調整後的尺寸）
+SNIPER_BOSS_IMAGE_SIZE = (
+    SNIPER_BOSS_WIDTH,
+    SNIPER_BOSS_HEIGHT,
+)  # 狙擊Boss圖片大小（調整後的尺寸）
 
 ######################音效設定######################
 
@@ -385,6 +416,7 @@ ULTIMATE_SOUND_PATH = (
     "素材/heavy-thunder-sound-effect-no-copyright-338980.mp3"  # 必殺技雷電音效
 )
 SNIPER_INCOMING_MUSIC_PATH = "素材/sniper_incoming.mp3"  # 狙擊怪來襲背景音樂
+BOSS_MUSIC_PATH = "素材/大怪來襲.wav"  # Boss背景音樂
 GAME_OVER_SOUND_PATH = "素材/Game Over.wav"  # 玩家死亡音效
 VICTORY_SOUND_PATH = (
     "素材/Stage Win (Super Mario) - QuickSounds.com.mp3"  # 勝利星星音效
@@ -395,6 +427,7 @@ HEALTH_PICKUP_SOUND_PATH = "素材/吃到寶物.wav"  # 愛心道具音效
 SHOOTING_SOUND_VOLUME = 0.2  # 射擊音效音量，降低讓必殺技更突出
 ULTIMATE_SOUND_VOLUME = 4.0  # 必殺技音效音量，設定為4倍（pygame會限制在1.0但表達意圖）
 SNIPER_INCOMING_MUSIC_VOLUME = 2.1  # 狙擊怪來襲音樂音量（3倍大聲）
+BOSS_MUSIC_VOLUME = 0.8  # Boss背景音樂音量
 GAME_OVER_SOUND_VOLUME = 0.8  # 死亡音效音量，較大聲但不過於震撼
 VICTORY_SOUND_VOLUME = 0.9  # 勝利星星音效音量
 HEALTH_PICKUP_SOUND_VOLUME = 0.6  # 愛心道具音效音量
