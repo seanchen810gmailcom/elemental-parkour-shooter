@@ -53,6 +53,11 @@ class Player(GameObject):
         self.max_health = PLAYER_MAX_HEALTH
         self.is_alive = True
 
+        # 玩家圖片相關
+        self.player_right_image = None  # 向右看的圖片
+        self.player_left_image = None  # 向左看的圖片
+        self.load_player_images()  # 載入圖片
+
         # 生命次數系統
         self.lives = PLAYER_LIVES  # 玩家總生命次數
         self.death_time = 0  # 死亡時間記錄
@@ -1093,50 +1098,37 @@ class Player(GameObject):
         camera_y (int): 攝影機 y 偏移\n
         \n
         繪製內容：\n
-        1. 玩家本體（矩形）\n
-        2. 面向指示（小三角形）\n
-        3. 狀態效果指示（顏色變化）\n
+        1. 玩家本體（圖片或矩形）\n
+        2. 狀態效果指示（顏色變化）\n
         """
         # 計算螢幕位置
         screen_x = self.x - camera_x
         screen_y = self.y - camera_y
 
-        # 根據狀態效果改變顏色
-        current_color = self.color
-
-        # 如果有減速效果，變成紫色
-        for effect in self.status_effects:
-            if effect.effect_type == "slow":
-                current_color = PURPLE
-                break
-            elif effect.effect_type == "paralysis":
-                current_color = GRAY
-                break
-
-        # 繪製玩家主體（使用螢幕座標）
+        # 創建玩家矩形
         player_rect = pygame.Rect(screen_x, screen_y, self.width, self.height)
-        pygame.draw.rect(screen, current_color, player_rect)
 
-        # 繪製面向指示（小三角形）
-        center_x = screen_x + self.width // 2
-        center_y = screen_y + self.height // 2
-
-        if self.facing_direction > 0:
-            # 面向右邊的三角形
-            triangle_points = [
-                (center_x + 5, center_y),
-                (center_x + 15, center_y - 5),
-                (center_x + 15, center_y + 5),
-            ]
+        if self.facing_direction > 0 and self.player_right_image:
+            # 使用向右的圖片
+            screen.blit(self.player_right_image, player_rect)
+        elif self.facing_direction < 0 and self.player_left_image:
+            # 使用向左的圖片
+            screen.blit(self.player_left_image, player_rect)
         else:
-            # 面向左邊的三角形
-            triangle_points = [
-                (center_x - 5, center_y),
-                (center_x - 15, center_y - 5),
-                (center_x - 15, center_y + 5),
-            ]
+            # 如果圖片載入失敗，使用顏色矩形備用
+            current_color = self.color
 
-        pygame.draw.polygon(screen, WHITE, triangle_points)
+            # 根據狀態效果改變顏色
+            for effect in self.status_effects:
+                if effect.effect_type == "slow":
+                    current_color = PURPLE
+                    break
+                elif effect.effect_type == "paralysis":
+                    current_color = GRAY
+                    break
+
+            # 繪製玩家矩形
+            pygame.draw.rect(screen, current_color, player_rect)
 
         # 繪製機關槍（當使用機關槍時）
         if self.current_weapon == "machine_gun":
@@ -1155,6 +1147,46 @@ class Player(GameObject):
             self.draw_sniper_rifle(screen, camera_x, camera_y)
 
         # 移除滑牆白色邊框特效，保持簡潔外觀
+
+    def load_player_images(self):
+        """
+        載入玩家角色圖片 - 包含面向左右的兩種狀態\n
+        \n
+        功能:\n
+        1. 載入面向右方的圖片\n
+        2. 載入面向左方的圖片\n
+        3. 將圖片縮放到玩家尺寸\n
+        4. 如果載入失敗，使用預設顏色矩形\n
+        \n
+        圖片處理:\n
+        - 支援 PNG 格式的透明背景圖片\n
+        - 自動縮放到 PLAYER_IMAGE_SIZE 尺寸\n
+        - 保持圖片原始比例並居中\n
+        """
+        try:
+            # 載入向右看的圖片
+            self.player_right_image = pygame.image.load(
+                PLAYER_RIGHT_IMAGE_PATH
+            ).convert_alpha()
+            self.player_right_image = pygame.transform.scale(
+                self.player_right_image, PLAYER_IMAGE_SIZE
+            )
+            print(f"成功載入玩家向右圖片: {PLAYER_RIGHT_IMAGE_PATH}")
+
+            # 載入向左看的圖片
+            self.player_left_image = pygame.image.load(
+                PLAYER_LEFT_IMAGE_PATH
+            ).convert_alpha()
+            self.player_left_image = pygame.transform.scale(
+                self.player_left_image, PLAYER_IMAGE_SIZE
+            )
+            print(f"成功載入玩家向左圖片: {PLAYER_LEFT_IMAGE_PATH}")
+
+        except (pygame.error, FileNotFoundError) as e:
+            # 圖片載入失敗，將使用預設顏色矩形
+            print(f"玩家圖片載入失敗: {e}")
+            self.player_right_image = None
+            self.player_left_image = None
 
     def load_crosshair_image(self):
         """

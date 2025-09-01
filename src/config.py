@@ -32,12 +32,17 @@ PLATFORM_HEIGHT = 20
 ######################玩家設定######################
 
 # 玩家基本屬性
-PLAYER_WIDTH = 40
-PLAYER_HEIGHT = 60
+PLAYER_WIDTH = 60  # 增加寬度 (40 -> 60)
+PLAYER_HEIGHT = 90  # 增加高度 (60 -> 90)
 PLAYER_COLOR = BLUE
 PLAYER_SPEED = 8
 PLAYER_JUMP_STRENGTH = -20  # 增強跳躍力
 PLAYER_MAX_HEALTH = 200  # 降低玩家血量從300到200，提升遊戲挑戰性
+
+# 玩家圖片設定
+PLAYER_RIGHT_IMAGE_PATH = "素材/maxresdefault.png"  # 玩家向右看的圖片
+PLAYER_LEFT_IMAGE_PATH = "素材/maxresdefault拷貝.png"  # 玩家向左看的圖片
+PLAYER_IMAGE_SIZE = (PLAYER_WIDTH, PLAYER_HEIGHT)  # 玩家圖片大小
 
 # 跑酷相關設定
 GRAVITY = 1.2
