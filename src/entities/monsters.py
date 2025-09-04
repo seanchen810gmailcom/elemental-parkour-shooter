@@ -555,7 +555,7 @@ class LavaMonster(Monster):
         )
 
         # 岩漿怪特殊屬性
-        self.lava_ball_cooldown = 3.0  # 熔岩球攻擊冷卻時間（設定為3秒）
+        self.lava_ball_cooldown = 5.0  # 熔岩球攻擊冷卻時間（設定為5秒）
 
         # 岩漿怪的分數值（較高，因為比較強）
         self.score_value = 150
@@ -563,7 +563,7 @@ class LavaMonster(Monster):
         self.lava_balls = []  # 噴射的熔岩球列表
 
         # 新增：自動發射系統
-        self.auto_fire_interval = 3.0  # 每3秒自動發射一次
+        self.auto_fire_interval = 5.0  # Boss每5秒自動發射一次
         self.last_auto_fire_time = 0  # 上次自動發射時間
 
         # 載入怪物圖片
@@ -675,7 +675,7 @@ class LavaMonster(Monster):
 
     def attack_player(self, player):
         """
-        岩漿怪的攻擊方式 - 近戰 + 遠程熔岩球\n
+        岩漿怪的攻擊方式 - 僅近戰攻擊\n
         \n
         參數:\n
         player (Player): 目標玩家\n
@@ -683,20 +683,8 @@ class LavaMonster(Monster):
         回傳:\n
         bool: True 表示攻擊成功\n
         """
-        # 先嘗試近戰攻擊
-        if super().attack_player(player):
-            return True
-
-        # 如果玩家在中距離範圍，使用熔岩球攻擊
-        dx = player.x - self.x
-        dy = player.y - self.y
-        distance = math.sqrt(dx**2 + dy**2)
-
-        if 60 < distance <= 150:  # 中距離攻擊範圍
-            lava_ball = self.create_lava_ball(player.x, player.y)
-            return lava_ball is not None
-
-        return False
+        # 只保留近戰攻擊
+        return super().attack_player(player)
 
     def check_lava_ball_collision(self, player):
         """
@@ -762,20 +750,22 @@ class LavaMonster(Monster):
             # 檢查熔岩球碰撞
             self.check_lava_ball_collision(player)
 
-            # 如果是Boss模式，執行自動回血
-            self.auto_heal()
-
-            # 新增：自動發射系統 - 每3秒朝玩家發射火球
-            current_time = time.time()
-            if current_time - self.last_auto_fire_time >= self.auto_fire_interval:
-                if player.is_alive:
-                    # 朝玩家中心位置發射火球
-                    player_center_x = player.x + player.width // 2
-                    player_center_y = player.y + player.height // 2
-                    lava_ball = self.create_lava_ball(player_center_x, player_center_y)
-                    if lava_ball:
-                        self.last_auto_fire_time = current_time
-                        print(f"🔥 岩漿怪自動發射火球朝向玩家！")
+            # 如果是Boss模式，執行自動回血和自動發射
+            if self.is_boss:
+                self.auto_heal()
+                # Boss的自動發射系統 - 每5秒朝玩家發射火球
+                current_time = time.time()
+                if current_time - self.last_auto_fire_time >= self.auto_fire_interval:
+                    if player.is_alive:
+                        # 朝玩家中心位置發射火球
+                        player_center_x = player.x + player.width // 2
+                        player_center_y = player.y + player.height // 2
+                        lava_ball = self.create_lava_ball(
+                            player_center_x, player_center_y
+                        )
+                        if lava_ball:
+                            self.last_auto_fire_time = current_time
+                            print(f"🔥 岩漿Boss發射火球朝向玩家！")
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """
@@ -1533,7 +1523,7 @@ class SniperBoss(Monster):
             "radius": 0,  # 初始半徑
             "max_radius": 450,  # 最大擴散半徑（原本150 * 3 = 450）
             "expansion_speed": 8,  # 擴散速度
-            "damage": int(self.damage * 1.2),  # 震波傷害
+            "damage": 200,  # 震波傷害設為固定200點
             "knockback_force": 200,  # 擊退力道
             "lifetime": 2.0,  # 震波持續時間
             "created_time": time.time(),

@@ -552,6 +552,7 @@ class ElementalParkourShooter:
                     if self.game_state != "death_screen":
                         self.play_game_over_sound()  # 播放死亡音效
                         self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
+                        self.stop_boss_music_with_fade()  # 停止所有Boss音樂
                     self.game_state = "death_screen"
                     self.game_over_time = time.time()
                     print(f"💀 玩家死亡！剩餘生命次數: {self.player.lives}")
@@ -559,6 +560,8 @@ class ElementalParkourShooter:
                     # 沒有剩餘生命次數，遊戲結束
                     if self.game_state != "game_over":
                         self.play_game_over_sound()  # 播放死亡音效
+                        self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
+                        self.stop_boss_music_with_fade()  # 停止所有Boss音樂
                         self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
                     self.game_state = "game_over"
                     self.game_over_time = time.time()

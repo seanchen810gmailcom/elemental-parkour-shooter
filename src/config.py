@@ -37,7 +37,7 @@ PLAYER_HEIGHT = 90  # 增加高度 (60 -> 90)
 PLAYER_COLOR = BLUE
 PLAYER_SPEED = 8
 PLAYER_JUMP_STRENGTH = -20  # 增強跳躍力
-PLAYER_MAX_HEALTH = 200  # 降低玩家血量從300到200，提升遊戲挑戰性
+PLAYER_MAX_HEALTH = 800  # 將玩家血量增加為兩倍（從200增加到400）
 
 # 玩家圖片設定
 PLAYER_RIGHT_IMAGE_PATH = "素材/maxresdefault.png"  # 玩家向右看的圖片

@@ -28,8 +28,8 @@ class MonsterManager:
     def __init__(self):
         self.monsters = []  # 所有活躍怪物列表
         self.spawn_timer = 0
-        self.spawn_interval = 2.5  # 生成間隔（秒）- 從4秒縮短到2.5秒，提升40%生成頻率
-        self.max_monsters = 9  # 螢幕上最大怪物數量 - 從6增加到9
+        self.spawn_interval = 3.0  # 生成間隔改為3秒
+        self.max_monsters = 3  # 螢幕上最大怪物數量為3隻
         self.wave_number = 1  # 當前波次
         self.monsters_killed = 0  # 擊殺數量
         self.boss_spawned = False  # Boss是否已生成
@@ -226,10 +226,14 @@ class MonsterManager:
         """
         self.spawn_timer += dt
 
-        # 固定每2.5秒生成一隻怪物（提升生成頻率）
+        # 每10秒嘗試生成3隻怪物
         if self.spawn_timer >= self.spawn_interval:
             self.spawn_timer = 0
-            return True  # 該生成新怪物了
+            # 一次性生成3隻
+            for _ in range(3):
+                if len(self.monsters) < self.max_monsters:
+                    return True  # 只要還能生成就回傳True
+            return False  # 如果滿了就回傳False
 
         return False
 
@@ -384,28 +388,28 @@ class MonsterManager:
         # 先統計當前活著的小怪數量
         alive_monsters = [monster for monster in self.monsters if monster.is_alive]
         current_monster_count = len(alive_monsters)
-        
+
         print(f"🎯 狙擊Boss出現前，場上有 {current_monster_count} 個小怪")
-        
+
         # 如果小怪數量超過3個，只保留3個，其餘移除
         if current_monster_count > 3:
             # 隨機選擇3個小怪保留，其他的標記為死亡
             monsters_to_keep = random.sample(alive_monsters, 3)
-            
+
             # 將不在保留清單中的小怪標記為死亡
             removed_count = 0
             for monster in alive_monsters:
                 if monster not in monsters_to_keep:
                     monster.is_alive = False
                     removed_count += 1
-            
+
             print(f"🧹 移除了 {removed_count} 個小怪，保留 3 個小怪")
-        
+
         # 如果小怪數量不足3個，補充到3個
         elif current_monster_count < 3:
             needed_monsters = 3 - current_monster_count
             spawned_count = 0
-            
+
             for _ in range(needed_monsters):
                 # 獲取生成位置
                 spawn_result = self.get_spawn_position(platforms, player)
@@ -426,14 +430,16 @@ class MonsterManager:
 
                 self.monsters.append(new_monster)
                 spawned_count += 1
-            
+
             print(f"➕ 補充了 {spawned_count} 個小怪")
-        
+
         else:
             print(f"✅ 場上剛好有 3 個小怪，無需調整")
-        
+
         # 最終確認
-        final_alive_count = len([monster for monster in self.monsters if monster.is_alive])
+        final_alive_count = len(
+            [monster for monster in self.monsters if monster.is_alive]
+        )
         print(f"🎯 狙擊Boss出現後，場上確保有 {final_alive_count} 個小怪！")
 
     def update(self, player, platforms, dt, bullets=None, level_width=None):
