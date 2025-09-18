@@ -2,7 +2,7 @@
 
 ## 專案概覽
 
-這是一個基於 Pygame 的 2D 跑酷射擊遊戲，結合元素屬性系統和嚴格模組化架構。玩家使用跑酷技能（雙跳、爬牆）在程序生成的關卡中對抗具有元素弱點的怪物。
+這是一個基於 Pygame 的 2D 跑酷射擊遊戲，結合元素屬性系統和嚴格模組化架構。玩家使用跑酷技能（雙跳、爬牆）在 30 層垂直關卡中對抗具有元素弱點的怪物。
 
 ## 核心架構設計
 
@@ -24,6 +24,17 @@ src/
 - 支援雙重導入模式：模組模式 (`python3 -m src.main`) 和直接執行
 - 所有檔案使用 try/except ImportError 模式處理相對/絕對導入
 
+**導入模式範例**:
+
+```python
+try:
+    from ..config import *
+    from ..core.game_objects import GameObject
+except ImportError:
+    from src.config import *
+    from src.core.game_objects import GameObject
+```
+
 ### 2. 管理器模式與更新順序
 
 每個複雜系統都有專用管理器，**必須嚴格按照以下順序更新**（在 `main.py` 中）：
@@ -43,6 +54,17 @@ self.damage_display.update()
 - `WeaponManager`: 子彈物理、碰撞檢測、必殺技系統
 - `LevelManager`: 30 層跑酷平台生成、星星系統
 - `DamageDisplayManager`: 浮動傷害數字、UI 效果
+
+**管理器通信模式**:
+
+```python
+# 管理器間通過字典返回值通信，避免直接耦合
+monster_update_result = self.monster_manager.update(player, platforms, dt)
+if monster_update_result["boss_defeated"]:
+    # 在Boss位置生成勝利星星
+    self.level_manager.star_x = monster_update_result["boss_death_x"]
+    self.level_manager.star_y = monster_update_result["boss_death_y"] - 50
+```
 
 ## 元素屬性系統
 
@@ -65,6 +87,14 @@ if status_effect:
     target.add_status_effect(status_effect["type"], status_effect["duration"], status_effect["intensity"])
 ```
 
+**屬性剋制關係**:
+
+- `water` → `lava_monster` (2x 弱點攻擊)
+- `thunder` → `water_monster` (2x 弱點攻擊 + 麻痺)
+- `fire` → `water_monster` (1.5x 額外傷害)
+- `ice` → `tornado_monster` (2x 弱點攻擊 + 減速)
+- `fire` → `lava_monster` (0.5x 抗性)
+
 ## 遊戲平衡與難度配置
 
 ### 配置集中化原則
@@ -80,7 +110,7 @@ LAVA_MONSTER_DAMAGE = 45   # 提升傷害 30→45 (+50%)
 LAVA_TORNADO_BOSS_HEALTH = 1500  # 提升Boss血量 1000→1500 (+50%)
 
 # 玩家容錯率降低
-PLAYER_MAX_HEALTH = 200    # 降低玩家血量從300到200
+PLAYER_MAX_HEALTH = 800    # 玩家血量增加為兩倍
 PLAYER_LIVES = 2           # 從3次降到2次
 ```
 
@@ -88,36 +118,27 @@ PLAYER_LIVES = 2           # 從3次降到2次
 
 在 `MonsterManager` 中實現：
 
-- 生成間隔從 4 秒縮短到 2.5 秒（+40%頻率）
-- 最大怪物數量從 6 增到 9 隻
+- 生成間隔從 4 秒縮短到 3 秒
+- 最大怪物數量控制在 3 隻
 - 每波屬性增長率提升（血量+15%，攻擊力+8%）
 
-## 管理器通信模式
+### 武器系統平衡
 
-### 數據傳遞慣例
-
-管理器間通過字典返回值通信，避免直接耦合：
+四種武器的差異化設計：
 
 ```python
-# MonsterManager 返回波次狀態
-monster_update_result = self.monster_manager.update(player, platforms, dt)
-if monster_update_result["boss_defeated"]:
-    # 在Boss位置生成勝利星星
-    self.level_manager.star_x = monster_update_result["boss_death_x"]
-    self.level_manager.star_y = monster_update_result["boss_death_y"] - 50
+# 機關槍：攻擊力低但射速極快
+"machine_gun": {"fire_rate": 0.1, "damage": 8}
 
-# WeaponManager 返回碰撞結果
-collision_results = self.weapon_manager.update(targets=all_targets)
-for collision in collision_results:
-    self.score += 10  # 每發子彈擊中得分
-    self.damage_display.add_damage_number(...)
+# 衝鋒槍：攻擊力高射速中等
+"assault_rifle": {"fire_rate": 0.4, "damage": 40}
+
+# 散彈槍：近距離高傷害（5發彈丸）
+"shotgun": {"pellet_count": 5, "damage": 25}
+
+# 狙擊槍：高傷害低射速
+"sniper": {"fire_rate": 1.5, "damage": 90}
 ```
-
-### 特殊系統整合
-
-- **Boss 火焰子彈系統**: Boss 有獨立的 `fire_bullets` 列表，在 `MonsterManager.update_boss_fire_bullets()` 中處理
-- **必殺技系統**: 玩家按 Q 觸發，`weapon_manager.create_ultimate()` 處理智能目標分配
-- **30 層跑酷系統**: `LevelManager` 生成大型垂直關卡，平台間距已調整提升難度
 
 ## 開發者工作流程
 
@@ -142,6 +163,13 @@ python3 main.py
 - `MonsterManager.update_boss_fire_bullets()`: Boss 火焰子彈對玩家
 - `Player.handle_collisions()`: 玩家對平台物理
 - `Monster.handle_collisions()`: 怪物對平台物理
+
+### 音效系統架構
+
+- 音效路徑集中於 `config.py` 的音效設定區段
+- 動態音量調整：`play_shooting_sound(damage)` 根據傷害調整音量
+- 多頻道播放：必殺技音效同時播放 3 次增強效果
+- 音效載入失敗時優雅降級，不影響遊戲運行
 
 ## 專案特定慣例
 
