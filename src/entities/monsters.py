@@ -1286,6 +1286,11 @@ class SniperBoss(Monster):
         self.last_tracking_bullet_time = 0
         self.tracking_bullets = []
 
+        # 散彈式發射系統
+        self.shotgun_cooldown = SNIPER_BOSS_SHOTGUN_INTERVAL  # 每10秒發射一次散彈
+        self.last_shotgun_time = 0
+        self.shotgun_bullets = []  # 散彈式子彈列表
+
         # 震波攻擊系統
         self.shockwave_cooldown = 10.0  # 震波攻擊冷卻時間（調慢攻擊速度）
         self.last_shockwave_time = 0
@@ -1427,6 +1432,138 @@ class SniperBoss(Monster):
                 active_bullets.append(bullet)
 
         self.tracking_bullets = active_bullets
+
+    def create_shotgun_burst(self, player):
+        """
+        創建散彈式爆發攻擊（類似散彈槍，一次發射5發不同角度的子彈）\n
+        \n
+        參數:\n
+        player (Player): 目標玩家\n
+        \n
+        回傳:\n
+        list: 散彈子彈列表\n
+        """
+        current_time = time.time()
+
+        # 檢查冷卻時間
+        if current_time - self.last_shotgun_time < self.shotgun_cooldown:
+            return []
+
+        # 計算發射起點（從Boss中心發射）
+        start_x = self.x + self.width // 2
+        start_y = self.y + self.height // 2
+
+        # 計算朝向玩家的基礎方向
+        player_center_x = player.x + player.width // 2
+        player_center_y = player.y + player.height // 2
+
+        dx = player_center_x - start_x
+        dy = player_center_y - start_y
+        distance = math.sqrt(dx**2 + dy**2)
+
+        if distance == 0:
+            return []
+
+        # 基礎射擊角度
+        base_angle = math.atan2(dy, dx)
+
+        new_bullets = []
+
+        # 創建5發子彈，分散在扇形區域內
+        for i in range(SNIPER_BOSS_SHOTGUN_PELLETS):
+            # 計算散射角度偏移（從-40%到+40%的散射角度）
+            if SNIPER_BOSS_SHOTGUN_PELLETS > 1:
+                angle_offset = (
+                    (i / (SNIPER_BOSS_SHOTGUN_PELLETS - 1)) - 0.5
+                ) * SNIPER_BOSS_SHOTGUN_SPREAD
+            else:
+                angle_offset = 0
+
+            final_angle = base_angle + angle_offset
+
+            # 計算速度分量
+            velocity_x = math.cos(final_angle) * SNIPER_BOSS_SHOTGUN_SPEED
+            velocity_y = math.sin(final_angle) * SNIPER_BOSS_SHOTGUN_SPEED
+
+            bullet = {
+                "x": start_x,
+                "y": start_y,
+                "velocity_x": velocity_x,
+                "velocity_y": velocity_y,
+                "damage": SNIPER_BOSS_SHOTGUN_DAMAGE,
+                "lifetime": 8.0,  # 8秒後消失
+                "created_time": current_time,
+                "bullet_type": "sniper_boss_shotgun",  # 標記為散彈類型
+            }
+
+            new_bullets.append(bullet)
+
+        self.shotgun_bullets.extend(new_bullets)
+        self.last_shotgun_time = current_time
+        print(f"🎯 狙擊Boss發射散彈爆發！{len(new_bullets)}發子彈")
+        return new_bullets
+
+    def update_shotgun_bullets(self, player):
+        """
+        更新散彈子彈狀態\n
+        \n
+        參數:\n
+        player (Player): 玩家物件（用於檢查碰撞）\n
+        """
+        current_time = time.time()
+        active_bullets = []
+
+        for bullet in self.shotgun_bullets:
+            # 檢查生存時間
+            if current_time - bullet["created_time"] > bullet["lifetime"]:
+                continue
+
+            # 更新子彈位置
+            bullet["x"] += bullet["velocity_x"]
+            bullet["y"] += bullet["velocity_y"]
+
+            # 檢查是否在合理範圍內
+            if (
+                -100 <= bullet["x"] <= SCREEN_WIDTH + 100
+                and -100 <= bullet["y"] <= SCREEN_HEIGHT + 100
+            ):
+                active_bullets.append(bullet)
+
+        self.shotgun_bullets = active_bullets
+
+    def check_shotgun_bullet_collision(self, player):
+        """
+        檢查散彈子彈與玩家的碰撞\n
+        \n
+        參數:\n
+        player (Player): 玩家物件\n
+        \n
+        回傳:\n
+        bool: True 表示有碰撞發生\n
+        """
+        bullets_to_remove = []
+        collision_occurred = False
+
+        for i, bullet in enumerate(self.shotgun_bullets):
+            # 簡單的矩形碰撞檢測
+            bullet_rect = pygame.Rect(bullet["x"] - 4, bullet["y"] - 4, 8, 8)
+            player_rect = pygame.Rect(player.x, player.y, player.width, player.height)
+
+            if bullet_rect.colliderect(player_rect) and player.is_alive:
+                # 造成傷害
+                damage_dealt = player.take_damage(bullet["damage"])
+                if damage_dealt > 0:
+                    print(f"🎯 狙擊Boss散彈命中玩家！傷害: {damage_dealt}")
+                    collision_occurred = True
+
+                # 標記子彈移除
+                bullets_to_remove.append(i)
+
+        # 移除碰撞的子彈（從後往前移除避免索引問題）
+        for i in reversed(bullets_to_remove):
+            del self.shotgun_bullets[i]
+
+        return collision_occurred
 
     def check_tracking_bullet_collision(self, player):
         """
@@ -1757,6 +1894,11 @@ class SniperBoss(Monster):
                 player_center_y = player.y + player.height // 2
                 self.create_tracking_bullet(player_center_x, player_center_y)
 
+        # 散彈爆發系統：每10秒發射一次散彈（無條件發射）
+        if current_time - self.last_shotgun_time >= self.shotgun_cooldown:
+            # 無條件發射散彈爆發攻擊，無論玩家狀態
+            self.create_shotgun_burst(player)
+
         # 更積極的攻擊邏輯
         if player_detected:
             # 震波攻擊檢查
@@ -1808,6 +1950,12 @@ class SniperBoss(Monster):
 
             # 檢查直線子彈碰撞
             self.check_tracking_bullet_collision(player)
+
+            # 更新散彈子彈
+            self.update_shotgun_bullets(player)
+
+            # 檢查散彈子彈碰撞
+            self.check_shotgun_bullet_collision(player)
 
             # 更新震波
             self.update_shockwaves(player)
@@ -1916,6 +2064,26 @@ class SniperBoss(Monster):
                 )
                 pygame.draw.circle(
                     screen, WHITE, (int(bullet_screen_x), int(bullet_screen_y)), 4
+                )
+
+        # 繪製散彈子彈（考慮攝影機偏移）
+        for bullet in self.shotgun_bullets:
+            bullet_screen_x = bullet["x"] - camera_x
+            bullet_screen_y = bullet["y"] - camera_y
+            # 只繪製在螢幕範圍內的子彈
+            if (
+                -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
+                and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
+            ):
+                # 繪製散彈子彈（紅色）
+                pygame.draw.circle(
+                    screen,
+                    SNIPER_BOSS_SHOTGUN_COLOR,
+                    (int(bullet_screen_x), int(bullet_screen_y)),
+                    6,
+                )
+                pygame.draw.circle(
+                    screen, WHITE, (int(bullet_screen_x), int(bullet_screen_y)), 3
                 )
 
         # 繪製震波

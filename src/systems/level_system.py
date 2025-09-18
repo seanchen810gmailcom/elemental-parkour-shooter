@@ -649,7 +649,7 @@ class LevelManager:
 
         return False
 
-    def update(self, dt, player, bullets):
+    def update(self, dt, player, bullets, death_countdown_active=False):
         """
         更新關卡中的所有動態物件\n
         \n
@@ -657,6 +657,7 @@ class LevelManager:
         dt (float): 時間間隔\n
         player (Player): 玩家物件\n
         bullets (list): 子彈列表\n
+        death_countdown_active (bool): 玩家是否處於死亡倒數狀態\n
         """
         # 更新愛心道具動畫並檢查碰撞
         health_pickup_collected = False
@@ -665,51 +666,57 @@ class LevelManager:
             if pickup.check_collision(player):
                 health_pickup_collected = True
 
-        # 檢查尖刺碰撞
+        # 檢查尖刺碰撞（只有在玩家存活且不在死亡倒數時才造成傷害）
         total_spike_damage = 0
-        for spike in self.spike_hazards:
-            damage = spike.check_collision(player)
-            if damage > 0:
-                total_spike_damage += damage
+        if player.is_alive and not death_countdown_active:
+            for spike in self.spike_hazards:
+                damage = spike.check_collision(player)
+                if damage > 0:
+                    total_spike_damage += damage
 
-                # 計算尖刺中心與玩家中心的方向
-                spike_center_x = spike.x + spike.width // 2
-                spike_center_y = spike.y + spike.height // 2
-                player_center_x = player.x + player.width // 2
-                player_center_y = player.y + player.height // 2
+                    # 計算尖刺中心與玩家中心的方向
+                    spike_center_x = spike.x + spike.width // 2
+                    spike_center_y = spike.y + spike.height // 2
+                    player_center_x = player.x + player.width // 2
+                    player_center_y = player.y + player.height // 2
 
-                # 計算反彈方向
-                dx = player_center_x - spike_center_x
-                dy = player_center_y - spike_center_y
-                distance = math.sqrt(dx**2 + dy**2)
+                    # 計算反彈方向
+                    dx = player_center_x - spike_center_x
+                    dy = player_center_y - spike_center_y
+                    distance = math.sqrt(dx**2 + dy**2)
 
-                if distance > 0:
-                    # 正規化方向向量
-                    dx /= distance
-                    dy /= distance
+                    if distance > 0:
+                        # 正規化方向向量
+                        dx /= distance
+                        dy /= distance
 
-                    # 給玩家溫和的反彈效果（根據尖刺大小調整）
-                    # 尖刺寬度30-60，高度30，所以水平彈開45像素，垂直彈開30像素
-                    horizontal_knockback = 45  # 接近尖刺平均寬度
-                    vertical_knockback = -30  # 等於尖刺高度
+                        # 給玩家溫和的反彈效果（根據尖刺大小調整）
+                        # 尖刺寬度30-60，高度30，所以水平彈開45像素，垂直彈開30像素
+                        horizontal_knockback = 45  # 接近尖刺平均寬度
+                        vertical_knockback = -30  # 等於尖刺高度
 
-                    player.velocity_x = dx * horizontal_knockback  # 水平反彈
-                    player.velocity_y = min(
-                        vertical_knockback, dy * horizontal_knockback
-                    )  # 向上跳開
+                        player.velocity_x = dx * horizontal_knockback  # 水平反彈
+                        player.velocity_y = min(
+                            vertical_knockback, dy * horizontal_knockback
+                        )  # 向上跳開
 
-                    print(f"🔺 踩到尖刺！受到 {total_spike_damage} 點傷害並輕微彈開")
-                else:
-                    # 如果沒有方向，預設向上跳開（輕微）
-                    player.velocity_y = -30  # 等於尖刺高度
-                    print(f"🔺 踩到尖刺！受到 {total_spike_damage} 點傷害並向上彈開")
+                        print(
+                            f"🔺 踩到尖刺！受到 {total_spike_damage} 點傷害並輕微彈開"
+                        )
+                    else:
+                        # 如果沒有方向，預設向上跳開（輕微）
+                        player.velocity_y = -30  # 等於尖刺高度
+                        print(
+                            f"🔺 踩到尖刺！受到 {total_spike_damage} 點傷害並向上彈開"
+                        )
 
-                # 給玩家一個短暫的無敵時間，避免連續受傷
-                break  # 只計算第一個碰撞的尖刺傷害
+                    # 給玩家一個短暫的無敵時間，避免連續受傷
+                    break  # 只計算第一個碰撞的尖刺傷害
 
         # 如果受到尖刺傷害，扣除玩家生命值
+        damage_result = None
         if total_spike_damage > 0:
-            player.take_damage(total_spike_damage)
+            damage_result = player.take_damage(total_spike_damage)
 
         # 檢查玩家是否收集到星星
         if self.check_star_collision(player):
@@ -717,11 +724,13 @@ class LevelManager:
             return {
                 "star_collected": True,
                 "health_pickup_collected": health_pickup_collected,
+                "damage_result": damage_result,
             }
 
         return {
             "star_collected": False,
             "health_pickup_collected": health_pickup_collected,
+            "damage_result": damage_result,
         }
 
     def check_hazard_collisions(self, player):

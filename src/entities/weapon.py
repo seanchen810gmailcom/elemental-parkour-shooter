@@ -494,19 +494,52 @@ class WeaponManager:
                 lightning_bullet.max_ascent = 200  # 最大上升距離
                 lightning_bullet.original_speed = info["speed"]  # 保存原始速度
 
-                # 智能目標分配策略
+                # 智能目標分配策略 - 優先攻擊Boss
                 if targets:
-                    if len(targets) == 1:
-                        # 單怪物：所有子彈都追蹤同一目標
-                        lightning_bullet.assigned_target = targets[0]
-                    elif len(targets) >= 2:
-                        # 多怪物：優先確保每個怪物至少被一顆子彈攻擊
-                        target_index = i % len(targets)
-                        lightning_bullet.assigned_target = targets[target_index]
-                        # 記錄這個目標已被分配
-                        if not hasattr(targets[target_index], "assigned_bullet_count"):
-                            targets[target_index].assigned_bullet_count = 0
-                        targets[target_index].assigned_bullet_count += 1
+                    # 分離Boss和普通怪物
+                    boss_targets = [
+                        target
+                        for target in targets
+                        if hasattr(target, "is_boss") and target.is_boss
+                    ]
+                    regular_targets = [
+                        target
+                        for target in targets
+                        if not (hasattr(target, "is_boss") and target.is_boss)
+                    ]
+
+                    if boss_targets:
+                        # 有Boss時：所有子彈都攻擊Boss，忽略小怪
+                        # 如果有多個Boss（理論上不會發生），優先攻擊第一個
+                        lightning_bullet.assigned_target = boss_targets[0]
+                        if i == 0:  # 只在第一顆子彈時顯示訊息
+                            print(
+                                f"⚡ 必殺技鎖定Boss目標：{boss_targets[0].monster_type}"
+                            )
+                    elif regular_targets:
+                        # 沒有Boss時：攻擊普通怪物
+                        if len(regular_targets) == 1:
+                            # 單怪物：所有子彈都追蹤同一目標
+                            lightning_bullet.assigned_target = regular_targets[0]
+                        else:
+                            # 多怪物：優先確保每個怪物至少被一顆子彈攻擊
+                            target_index = i % len(regular_targets)
+                            lightning_bullet.assigned_target = regular_targets[
+                                target_index
+                            ]
+                            # 記錄這個目標已被分配
+                            if not hasattr(
+                                regular_targets[target_index], "assigned_bullet_count"
+                            ):
+                                regular_targets[target_index].assigned_bullet_count = 0
+                            regular_targets[target_index].assigned_bullet_count += 1
+
+                        if i == 0:  # 只在第一顆子彈時顯示訊息
+                            print(
+                                f"⚡ 必殺技攻擊普通怪物：{len(regular_targets)}個目標"
+                            )
+                    else:
+                        lightning_bullet.assigned_target = None
                 else:
                     lightning_bullet.assigned_target = None
 

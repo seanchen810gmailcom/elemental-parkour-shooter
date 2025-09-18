@@ -456,6 +456,9 @@ class MonsterManager:
         回傳:\n
         dict: 更新結果資訊\n
         """
+        # 初始化玩家傷害結果追蹤
+        player_damage_result = None
+
         # 更新所有活躍怪物，傳遞關卡寬度
         for monster in self.monsters:
             monster.update(player, platforms, level_width)
@@ -470,7 +473,12 @@ class MonsterManager:
 
             # 處理岩漿Boss的火焰子彈邏輯（只針對岩漿Boss）
             if hasattr(self.boss, "fire_bullets"):
-                self.update_boss_fire_bullets(player)
+                damage_result = self.update_boss_fire_bullets(player)
+                if damage_result:
+                    player_damage_result = damage_result
+
+            # 處理狙擊Boss的子彈邏輯（追蹤子彈由狙擊Boss自己處理，這裡不需要額外處理）
+            # 但是如果有需要額外的子彈管理器邏輯，可以在這裡添加
 
         # 移除死亡怪物（包含Boss）
         killed_this_frame = self.remove_dead_monsters()
@@ -534,6 +542,7 @@ class MonsterManager:
             "boss_death_y": boss_death_y,
             "new_monster": new_monster is not None,
             "total_killed": self.monsters_killed,
+            "player_damage_result": player_damage_result,  # 新增：玩家傷害結果
         }
 
     def get_monsters_in_range(self, x, y, range_distance):
@@ -713,17 +722,26 @@ class MonsterManager:
         \n
         參數:\n
         player (Player): 玩家物件\n
+        \n
+        回傳:\n
+        dict: 玩家傷害結果（如果有的話）\n
         """
         if not self.boss:
-            return
+            return None
 
         # 處理岩漿Boss的火焰子彈（舊系統）
         if hasattr(self.boss, "fire_bullets"):
-            self.update_lava_boss_fire_bullets(player)
+            damage_result = self.update_lava_boss_fire_bullets(player)
+            if damage_result:
+                return damage_result
 
         # 處理狙擊Boss的追蹤子彈（新系統）
         if hasattr(self.boss, "boss_bullets"):
-            self.update_sniper_boss_bullets(player)
+            damage_result = self.update_sniper_boss_bullets(player)
+            if damage_result:
+                return damage_result
+
+        return None
 
     def update_lava_boss_fire_bullets(self, player):
         """
@@ -731,9 +749,13 @@ class MonsterManager:
         \n
         參數:\n
         player (Player): 玩家物件\n
+        \n
+        回傳:\n
+        dict: 玩家傷害結果（如果有的話）\n
         """
         current_time = time.time()
         active_bullets = []
+        player_damage_result = None
 
         for bullet in self.boss.fire_bullets:
             # 檢查生存時間
@@ -748,7 +770,9 @@ class MonsterManager:
             bullet_rect = pygame.Rect(bullet["x"] - 8, bullet["y"] - 8, 16, 16)
             if bullet_rect.colliderect(player.rect):
                 # 火焰子彈擊中玩家
-                player.take_damage(bullet["damage"])
+                damage_result = player.take_damage(bullet["damage"])
+                if damage_result:
+                    player_damage_result = damage_result
                 print(f"🔥 Boss火焰子彈擊中玩家！造成 {bullet['damage']} 點傷害")
                 continue  # 擊中後子彈消失
 
@@ -769,15 +793,21 @@ class MonsterManager:
             if 80 <= distance <= 250:  # 火焰子彈的有效攻擊範圍
                 self.create_boss_fire_bullet(player.x, player.y)
 
+        return player_damage_result
+
     def update_sniper_boss_bullets(self, player):
         """
         更新狙擊Boss追蹤子彈狀態\n
         \n
         參數:\n
         player (Player): 玩家物件\n
+        \n
+        回傳:\n
+        dict: 玩家傷害結果（如果有的話）\n
         """
         current_time = time.time()
         active_bullets = []
+        player_damage_result = None
 
         for bullet in self.boss.boss_bullets:
             # 檢查生存時間
@@ -815,7 +845,9 @@ class MonsterManager:
             bullet_rect = pygame.Rect(bullet["x"] - 8, bullet["y"] - 8, 16, 16)
             if bullet_rect.colliderect(player.rect):
                 # 追蹤子彈擊中玩家
-                player.take_damage(bullet["damage"])
+                damage_result = player.take_damage(bullet["damage"])
+                if damage_result:
+                    player_damage_result = damage_result
                 print(f"🎯 狙擊Boss追蹤子彈擊中玩家！造成 {bullet['damage']} 點傷害")
                 continue  # 擊中後子彈消失
 
@@ -840,6 +872,8 @@ class MonsterManager:
                 self.create_sniper_boss_tracking_bullet(
                     player.x + player.width // 2, player.y + player.height // 2
                 )
+
+        return player_damage_result
 
     def draw(self, screen, camera_x=0, camera_y=0):
         """
@@ -888,6 +922,24 @@ class MonsterManager:
                                 (255, 100, 255),  # 亮紫色內圈
                                 (int(bullet_screen_x), int(bullet_screen_y)),
                                 4,
+                            )
+
+                # 繪製狙擊Boss的散彈子彈
+                if hasattr(self.boss, "shotgun_bullets"):
+                    for bullet in self.boss.shotgun_bullets:
+                        bullet_screen_x = bullet["x"] - camera_x
+                        bullet_screen_y = bullet["y"] - camera_y
+                        # 只繪製在螢幕範圍內的散彈
+                        if (
+                            -20 <= bullet_screen_x <= SCREEN_WIDTH + 20
+                            and -20 <= bullet_screen_y <= SCREEN_HEIGHT + 20
+                        ):
+                            # 繪製散彈：紅色實心圓
+                            pygame.draw.circle(
+                                screen,
+                                SNIPER_BOSS_SHOTGUN_COLOR,
+                                (int(bullet_screen_x), int(bullet_screen_y)),
+                                6,
                             )
             else:  # 岩漿Boss
                 boss_text = font.render("🔥 LAVA BOSS", True, RED)

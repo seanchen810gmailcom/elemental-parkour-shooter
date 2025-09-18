@@ -1956,10 +1956,6 @@ class Player(GameObject):
         )
         screen.blit(health_text, (bar_x + 220, bar_y + 5))  # 向右移動避免重疊
 
-        # 繪製生命次數指示
-        lives_text = font.render(f"生命: {self.lives}", True, WHITE)
-        screen.blit(lives_text, (bar_x, bar_y - 30))  # 在血量條上方顯示
-
     def draw_bullet_ui(self, screen):
         """
         繪製武器選擇介面 - 顯示當前武器和可切換的類型\n

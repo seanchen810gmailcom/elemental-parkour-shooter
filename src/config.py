@@ -54,8 +54,8 @@ DOUBLE_JUMP_STRENGTH = (
 )  # 已棄用：現在三段跳都使用 PLAYER_JUMP_STRENGTH 確保每次跳躍高度一致
 
 # 玩家死亡設定
-PLAYER_LIVES = 2  # 玩家總生命次數 - 從3降到2，增加挑戰性
-DEATH_RESPAWN_DELAY = 1.0  # 死亡後重生延遲時間（秒）
+PLAYER_LIVES = 2  # 玩家總生命次數 - 修改為2條命
+DEATH_RESPAWN_DELAY = 3.0  # 死亡後重生延遲時間（修改為3秒倒數）
 GAME_OVER_DELAY = 2.0  # 進入遊戲結束畫面的延遲時間（秒）
 
 ######################武器與子彈設定######################
@@ -295,6 +295,14 @@ LAVA_BOSS_BULLET_COLOR = FIRE_BULLET_COLOR  # 火焰子彈顏色
 SNIPER_BOSS_BULLET_INTERVAL = 3.0  # 狙擊Boss每3秒發射一次子彈
 SNIPER_BOSS_BULLET_COLOR = PURPLE  # 紫色追蹤子彈
 SNIPER_BOSS_TRACKING_SPEED = 0.8  # 追蹤子彈的追蹤速度倍數
+
+# 狙擊Boss散彈式發射設定
+SNIPER_BOSS_SHOTGUN_INTERVAL = 10.0  # 散彈式發射間隔（每10秒一次）
+SNIPER_BOSS_SHOTGUN_PELLETS = 5  # 每次發射5發子彈
+SNIPER_BOSS_SHOTGUN_SPREAD = 0.8  # 散射角度（弧度）約46度
+SNIPER_BOSS_SHOTGUN_DAMAGE = 45  # 每發子彈的傷害
+SNIPER_BOSS_SHOTGUN_SPEED = 12  # 散彈子彈速度
+SNIPER_BOSS_SHOTGUN_COLOR = RED  # 散彈子彈顏色（紅色）
 
 ######################狙擊槍準心設定######################
 
