@@ -156,10 +156,6 @@ class ElementalParkourShooter:
         self.running = True
         self.game_over_time = 0  # 進入遊戲結束狀態的時間
 
-        # 死亡倒數狀態
-        self.death_countdown_start = 0  # 死亡倒數開始時間
-        self.death_countdown_active = False  # 是否正在倒數中
-
         # 遊戲進度管理（簡化為只有一個跑酷關卡）
         self.star_collected = False
 
@@ -467,23 +463,12 @@ class ElementalParkourShooter:
                 if player_update_result and player_update_result.get(
                     "game_over", False
                 ):
-                    # 玩家死亡且沒有剩餘生命次數，進入遊戲結束狀態
+                    # 玩家死亡直接遊戲結束
                     self.play_game_over_sound()  # 播放死亡音效
                     self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
                     self.game_state = "game_over"
                     self.game_over_time = time.time()
                     print("💀 遊戲結束！")
-                elif player_update_result and player_update_result.get("died", False):
-                    # 玩家死亡但還有命，啟動倒數重生機制
-                    if not self.death_countdown_active:
-                        self.death_countdown_active = True
-                        self.death_countdown_start = time.time()
-                        # 不播放 Game Over 音效，只停止音樂
-                        self.stop_sniper_incoming_music()
-                        self.stop_boss_music_with_fade()
-                        print(
-                            f"💀 玩家死亡！剩餘生命次數: {self.player.lives}，開始倒數重生..."
-                        )
 
                 # 檢查玩家與陷阱的碰撞（現在沒有危險陷阱）
                 hazard_damage = self.level_manager.check_hazard_collisions(self.player)
@@ -586,48 +571,22 @@ class ElementalParkourShooter:
                 # 玩家已經死亡，不再進行遊戲更新
                 pass
 
-            # 處理死亡倒數機制
-            if self.death_countdown_active:
-                current_time = time.time()
-                countdown_elapsed = current_time - self.death_countdown_start
-
-                if countdown_elapsed >= DEATH_RESPAWN_DELAY:
-                    # 倒數結束，執行重生
-                    if self.player.respawn():
-                        self.death_countdown_active = False
-                        print("🔄 玩家自動重生成功")
-                    else:
-                        # 重生失敗，進入遊戲結束狀態
-                        self.death_countdown_active = False
-                        self.play_game_over_sound()
-                        self.game_state = "game_over"
-                        self.game_over_time = time.time()
-                        print("💀 重生失敗，遊戲結束")
-
             # 更新關卡系統
             bullets = self.weapon_manager.bullets
             level_update_result = self.level_manager.update(
-                dt, self.player, bullets, self.death_countdown_active
+                dt, self.player, bullets, False
             )
 
             # 檢查關卡中的傷害結果（如尖刺傷害）
             damage_result = level_update_result.get("damage_result")
             if damage_result:
                 if damage_result.get("game_over", False):
-                    # 玩家死亡且沒有剩餘生命次數，進入遊戲結束狀態
+                    # 玩家死亡直接遊戲結束
                     self.play_game_over_sound()  # 播放死亡音效
                     self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
                     self.game_state = "game_over"
                     self.game_over_time = time.time()
                     print("💀 遊戲結束！")
-                elif damage_result.get("died", False):
-                    # 玩家死亡但還有命，啟動倒數重生機制
-                    if not self.death_countdown_active:
-                        self.death_countdown_active = True
-                        self.death_countdown_start = time.time()
-                        print(
-                            f"💀 玩家死亡！開始3秒倒數重生... 剩餘生命: {self.player.lives}"
-                        )
 
             # 檢查是否收集到星星
             if level_update_result.get("star_collected", False):
@@ -673,23 +632,12 @@ class ElementalParkourShooter:
             monster_damage_result = monster_update_result.get("player_damage_result")
             if monster_damage_result:
                 if monster_damage_result.get("game_over", False):
-                    # 玩家死亡且沒有剩餘生命次數，進入遊戲結束狀態
+                    # 玩家死亡直接遊戲結束
                     self.play_game_over_sound()
                     self.stop_sniper_incoming_music()
                     self.game_state = "game_over"
                     self.game_over_time = time.time()
                     print("💀 遊戲結束！")
-                elif monster_damage_result.get("died", False):
-                    # 玩家死亡但還有命，啟動倒數重生機制
-                    if not self.death_countdown_active:
-                        self.death_countdown_active = True
-                        self.death_countdown_start = time.time()
-                        # 不播放 Game Over 音效，只停止音樂
-                        self.stop_sniper_incoming_music()
-                        self.stop_boss_music_with_fade()
-                        print(
-                            f"💀 玩家死亡！剩餘生命次數: {self.player.lives}，開始倒數重生..."
-                        )
 
             # 檢查Boss生成
             if monster_update_result["boss_spawned"]:
@@ -1128,19 +1076,12 @@ class ElementalParkourShooter:
             self.player.draw_bullet_ui(self.screen)
             self.player.draw_ultimate_ui(self.screen)
 
-            # 繪製生命次數（在螢幕最上方顯示）
-            self.draw_lives_display()
-
             # 繪製分數（恢復到原始位置）
             score_font = get_chinese_font(FONT_SIZE_MEDIUM)
             score_text = score_font.render(f"分數: {self.score}", True, WHITE)
             score_rect = score_text.get_rect()
             score_rect.topright = (SCREEN_WIDTH - 20, 20)  # 恢復到右上角原始位置
             self.screen.blit(score_text, score_rect)
-
-            # 繪製死亡倒數效果
-            if self.death_countdown_active:
-                self.draw_death_countdown()
 
         elif self.game_state == "victory":
             # 繪製勝利畫面
@@ -1228,75 +1169,6 @@ class ElementalParkourShooter:
 
         # 更新整個螢幕顯示
         pygame.display.flip()
-
-    def draw_lives_display(self):
-        """
-        在螢幕最上方顯示玩家剩餘生命次數\n
-        \n
-        顯示方式：\n
-        - 位置：螢幕最上方居中\n
-        - 顏色：根據生命數量變化（綠色->黃色->紅色）\n
-        - 字體：使用中等大小的中文字體\n
-        """
-        # 根據剩餘生命數量決定顏色
-        if self.player.lives >= 2:
-            color = GREEN  # 2條命或以上用綠色
-        elif self.player.lives == 1:
-            color = YELLOW  # 1條命用黃色
-        else:
-            color = RED  # 沒命了用紅色
-
-        # 繪製生命文字
-        font = get_chinese_font(SCORE_FONT_SIZE)
-        lives_text = font.render(f"剩餘生命: {self.player.lives}/2", True, color)
-
-        # 計算居中位置（螢幕最上方）
-        text_rect = lives_text.get_rect()
-        text_rect.centerx = SCREEN_WIDTH // 2
-        text_rect.top = 10  # 距離螢幕頂部10像素
-
-        # 繪製到螢幕上
-        self.screen.blit(lives_text, text_rect)
-
-    def draw_death_countdown(self):
-        """
-        繪製死亡倒數效果\n
-        \n
-        效果：\n
-        - 螢幕變暗（半透明黑色覆蓋）\n
-        - 顯示倒數數字\n
-        - 3秒倒數：3, 2, 1\n
-        """
-        # 創建半透明黑色覆蓋層，讓螢幕變暗
-        dark_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        dark_overlay.set_alpha(128)  # 50% 透明度
-        dark_overlay.fill(BLACK)
-        self.screen.blit(dark_overlay, (0, 0))
-
-        # 計算倒數時間
-        current_time = time.time()
-        countdown_elapsed = current_time - self.death_countdown_start
-        remaining_time = DEATH_RESPAWN_DELAY - countdown_elapsed
-
-        if remaining_time > 0:
-            # 顯示倒數數字
-            countdown_number = int(remaining_time) + 1
-            if countdown_number > 0:
-                # 倒數數字
-                font = get_chinese_font(96)  # 使用超大字體（96像素）
-                countdown_text = font.render(str(countdown_number), True, WHITE)
-                countdown_rect = countdown_text.get_rect(
-                    center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50)
-                )
-                self.screen.blit(countdown_text, countdown_rect)
-
-                # 倒數提示文字
-                hint_font = get_chinese_font(FONT_SIZE_LARGE)
-                hint_text = hint_font.render("重生倒數中...", True, YELLOW)
-                hint_rect = hint_text.get_rect(
-                    center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)
-                )
-                self.screen.blit(hint_text, hint_rect)
 
     def start_boss_music(self):
         """

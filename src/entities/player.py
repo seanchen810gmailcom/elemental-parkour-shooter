@@ -58,8 +58,6 @@ class Player(GameObject):
         self.player_left_image = None  # 向左看的圖片
         self.load_player_images()  # 載入圖片
 
-        # 生命次數系統
-        self.lives = PLAYER_LIVES  # 玩家總生命次數
         self.death_time = 0  # 死亡時間記錄
         self.is_dead = False  # 是否已經死亡（區別於 is_alive）
 
@@ -733,7 +731,13 @@ class Player(GameObject):
         4. 邊界檢查\n
         5. 更新安全位置\n
         6. 自動回血\n
+        \n
+        回傳:\n
+        dict or None: 如果玩家死亡則返回死亡狀態，否則返回 None\n
         """
+        # 檢查玩家是否已經死亡，如果是則返回遊戲結束狀態
+        if not self.is_alive:
+            return {"died": True, "game_over": True}
         # 更新狀態效果
         self.update_status_effects()
 
@@ -783,51 +787,14 @@ class Player(GameObject):
                 self.last_safe_y = self.y
                 self.safe_position_timer = 0
 
-        # 檢查是否掉出螢幕（需要重生）
+        # 檢查是否掉出螢幕（視為死亡）
         if self.y > SCREEN_HEIGHT + 200:
-            # 掉出螢幕視為死亡，扣除生命次數
+            # 掉出螢幕視為死亡，直接遊戲結束
             damage_result = self.take_damage(self.health)  # 造成致命傷害
-            if damage_result["game_over"]:
-                return damage_result  # 回傳遊戲結束資訊
-            else:
-                # 還有生命次數，準備重生
-                return damage_result
+            return damage_result  # 回傳遊戲結束資訊
 
-    def respawn(self):
-        """
-        重生玩家到上一個安全位置\n
-        \n
-        回傳:\n
-        bool: True 表示成功重生，False 表示無法重生（遊戲結束）\n
-        """
-        # 檢查是否還有生命次數
-        if self.lives <= 0:
-            return False  # 無法重生，遊戲結束
-
-        self.x = self.last_safe_x
-        self.y = self.last_safe_y
-        self.velocity_x = 0
-        self.velocity_y = 0
-        self.health = self.max_health  # 重生時恢復滿血
-        self.is_alive = True
-        self.is_dead = False
-        print(
-            f"🔄 玩家重生到位置: ({int(self.x)}, {int(self.y)})，剩餘生命: {self.lives}"
-        )
-        return True  # 成功重生
-
-    def can_respawn(self):
-        """
-        檢查是否可以重生（死亡延遲時間已過且還有生命次數）\n
-        \n
-        回傳:\n
-        bool: True 表示可以重生，False 表示還需要等待或已遊戲結束\n
-        """
-        if not self.is_dead or self.lives <= 0:
-            return False
-
-        current_time = time.time()
-        return (current_time - self.death_time) >= DEATH_RESPAWN_DELAY
+        # 正常情況下返回 None
+        return None
 
     def handle_collisions(self, platforms):
         """
@@ -1017,15 +984,8 @@ class Player(GameObject):
             self.is_dead = True
             self.death_time = time.time()
             result["died"] = True
-
-            # 減少生命次數
-            self.lives -= 1
-            print(f"💀 玩家死亡！剩餘生命次數: {self.lives}")
-
-            # 檢查是否遊戲結束
-            if self.lives <= 0:
-                result["game_over"] = True
-                print("💀 遊戲結束！沒有剩餘生命次數")
+            result["game_over"] = True  # 玩家死亡直接遊戲結束
+            print("💀 玩家死亡！遊戲結束")
 
         return result
 

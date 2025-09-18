@@ -54,7 +54,6 @@ DOUBLE_JUMP_STRENGTH = (
 )  # 已棄用：現在三段跳都使用 PLAYER_JUMP_STRENGTH 確保每次跳躍高度一致
 
 # 玩家死亡設定
-PLAYER_LIVES = 2  # 玩家總生命次數 - 修改為2條命
 DEATH_RESPAWN_DELAY = 3.0  # 死亡後重生延遲時間（修改為3秒倒數）
 GAME_OVER_DELAY = 2.0  # 進入遊戲結束畫面的延遲時間（秒）
 
@@ -233,7 +232,6 @@ GAME_OVER_BG_COLOR = BLACK
 DEATH_TITLE_TEXT = "💀 遊戲結束"
 DEATH_RETRY_TEXT = "按 R 重新開始"
 DEATH_QUIT_TEXT = "按 ESC 離開遊戲"
-DEATH_LIVES_TEXT = "剩餘生命"
 DEATH_FINAL_SCORE_TEXT = "最終分數"
 
 ######################背景與環境設定######################
