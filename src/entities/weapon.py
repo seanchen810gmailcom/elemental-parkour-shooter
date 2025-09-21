@@ -391,6 +391,351 @@ class Bullet(GameObject):
                 )
 
 
+######################爆炸效果類別######################
+
+
+class ExplosionEffect:
+    """
+    爆炸視覺效果 - 展示手榴彈爆炸的視覺回饋\n
+    \n
+    特效包含：\n
+    1. 多層同心圓爆炸波\n
+    2. 顏色漸變從黃到紅\n
+    3. 半秒鐘的動畫效果\n
+    \n
+    參數:\n
+    x (float): 爆炸中心 X 座標\n
+    y (float): 爆炸中心 Y 座標\n
+    max_radius (float): 最大爆炸半徑\n
+    """
+
+    def __init__(self, x, y, max_radius):
+        self.x = x
+        self.y = y
+        self.max_radius = max_radius
+        self.start_time = time.time()
+        self.duration = EXPLOSION_DURATION
+        self.is_active = True
+
+    def update(self):
+        """更新爆炸效果狀態"""
+        elapsed = time.time() - self.start_time
+        if elapsed >= self.duration:
+            self.is_active = False
+
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製爆炸效果\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 要繪製到的螢幕表面\n
+        camera_x (int): 攝影機 x 偏移\n
+        camera_y (int): 攝影機 y 偏移\n
+        """
+        if not self.is_active:
+            return
+
+        elapsed = time.time() - self.start_time
+        progress = elapsed / self.duration
+
+        # 計算螢幕座標
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # 爆炸波效果 - 從中心向外擴散
+        for i, color in enumerate(EXPLOSION_COLORS):
+            # 每層波的半徑隨時間增長
+            wave_progress = min(1.0, progress + i * 0.1)
+            current_radius = int(self.max_radius * wave_progress)
+
+            # 透明度隨時間遞減
+            alpha = max(0, 255 * (1 - progress))
+
+            if current_radius > 0 and alpha > 0:
+                # 創建帶透明度的表面
+                surface = pygame.Surface(
+                    (current_radius * 2, current_radius * 2), pygame.SRCALPHA
+                )
+                color_with_alpha = (*color, int(alpha))
+
+                # 繪製爆炸圓圈
+                pygame.draw.circle(
+                    surface,
+                    color_with_alpha,
+                    (current_radius, current_radius),
+                    current_radius,
+                    max(1, current_radius // 10),  # 線條粗細
+                )
+
+                # 將表面貼到螢幕上
+                screen.blit(
+                    surface, (screen_x - current_radius, screen_y - current_radius)
+                )
+
+
+######################手榴彈類別######################
+
+
+class Grenade(GameObject):
+    """
+    手榴彈類別 - 具備黏附能力的爆炸武器\n
+    \n
+    特殊功能：\n
+    1. 拋物線飛行，可黏附在任何物體上\n
+    2. 使用狙擊槍準心進行精確瞄準\n
+    3. 右鍵引爆，範圍傷害200點\n
+    4. 玩家最多只能有5顆\n
+    \n
+    參數:\n
+    x (float): 手榴彈初始 X 座標\n
+    y (float): 手榴彈初始 Y 座標\n
+    direction_x (float): X 方向的投擲向量\n
+    direction_y (float): Y 方向的投擲向量\n
+    """
+
+    def __init__(self, x, y, direction_x, direction_y):
+        super().__init__(x, y, GRENADE_SIZE, GRENADE_SIZE, GRENADE_COLOR)
+
+        # 移動屬性
+        self.velocity_x = direction_x * GRENADE_SPEED
+        self.velocity_y = direction_y * GRENADE_SPEED
+
+        # 手榴彈狀態
+        self.is_active = True
+        self.is_attached = False  # 是否已黏附到物體
+        self.attached_to = None  # 黏附的目標物件
+        self.attached_offset_x = 0  # 相對於黏附物件的偏移
+        self.attached_offset_y = 0
+
+        # 爆炸屬性
+        self.damage = GRENADE_DAMAGE
+        self.explosion_radius = GRENADE_EXPLOSION_RADIUS
+
+        # 記錄初始位置（用於調試）
+        self.start_x = x
+        self.start_y = y
+
+    def update(self, platforms=None, targets=None, level_width=None, level_height=None):
+        """
+        更新手榴彈位置和狀態\n
+        \n
+        參數:\n
+        platforms (list): 平台列表，用於碰撞檢測\n
+        targets (list): 目標列表（怪物等），用於黏附檢測\n
+        level_width (int): 關卡世界寬度\n
+        level_height (int): 關卡世界高度\n
+        \n
+        處理：\n
+        1. 如果已黏附，跟隨黏附物件移動\n
+        2. 如果未黏附，按照物理規律飛行\n
+        3. 檢測與各種物體的碰撞黏附\n
+        """
+        if not self.is_active:
+            return
+
+        if self.is_attached:
+            # 如果已黏附，跟隨黏附的物件移動
+            if self.attached_to:
+                self.x = self.attached_to.x + self.attached_offset_x
+                self.y = self.attached_to.y + self.attached_offset_y
+        else:
+            # 如果未黏附，繼續飛行
+            # 套用重力
+            self.velocity_y += GRENADE_GRAVITY
+
+            # 更新位置
+            self.x += self.velocity_x
+            self.y += self.velocity_y
+
+            # 檢查是否碰撞並黏附
+            self.check_attachment(platforms, targets, level_width, level_height)
+
+        # 更新碰撞矩形
+        self.update_rect()
+
+    def check_attachment(
+        self, platforms=None, targets=None, level_width=None, level_height=None
+    ):
+        """
+        檢查手榴彈是否應該黏附到物體上\n
+        \n
+        參數:\n
+        platforms (list): 平台列表\n
+        targets (list): 目標列表（怪物等）\n
+        level_width (int): 關卡世界寬度\n
+        level_height (int): 關卡世界高度\n
+        \n
+        黏附優先順序：\n
+        1. 怪物和Boss\n
+        2. 平台和牆壁\n
+        3. 其他遊戲物件\n
+        """
+        if self.is_attached:
+            return
+
+        # 優先黏附到怪物身上
+        if targets:
+            for target in targets:
+                if hasattr(target, "rect") and self.rect.colliderect(target.rect):
+                    self.attach_to_object(target)
+                    return
+
+        # 其次黏附到平台上
+        if platforms:
+            for platform in platforms:
+                if hasattr(platform, "rect") and self.rect.colliderect(platform.rect):
+                    self.attach_to_object(platform)
+                    return
+
+        # 檢查是否碰到世界邊界（使用關卡尺寸而非螢幕尺寸）
+        if level_width and level_height:
+            if self.x <= 0 or self.x >= level_width - self.width:
+                self.attach_to_wall(level_width)
+            elif self.y >= level_height - self.height:
+                self.attach_to_ground(level_height)
+
+    def attach_to_object(self, target_object):
+        """
+        將手榴彈黏附到指定物件上\n
+        \n
+        參數:\n
+        target_object: 要黏附的目標物件\n
+        """
+        self.is_attached = True
+        self.attached_to = target_object
+
+        # 計算相對於目標物件的偏移量
+        self.attached_offset_x = self.x - target_object.x
+        self.attached_offset_y = self.y - target_object.y
+
+        # 停止移動
+        self.velocity_x = 0
+        self.velocity_y = 0
+
+    def attach_to_wall(self, level_width=None):
+        """
+        將手榴彈黏附到牆壁上\n
+        \n
+        參數:\n
+        level_width (int): 關卡世界寬度\n
+        """
+        self.is_attached = True
+        self.attached_to = None  # 牆壁沒有物件
+        self.velocity_x = 0
+        self.velocity_y = 0
+
+        # 確保不超出世界邊界
+        if level_width:
+            if self.x <= 0:
+                self.x = 0
+            elif self.x >= level_width - self.width:
+                self.x = level_width - self.width
+
+    def attach_to_ground(self, level_height=None):
+        """
+        將手榴彈黏附到地面上\n
+        \n
+        參數:\n
+        level_height (int): 關卡世界高度\n
+        """
+        self.is_attached = True
+        self.attached_to = None  # 地面沒有物件
+        if level_height:
+            self.y = level_height - self.height
+        self.velocity_x = 0
+        self.velocity_y = 0
+
+    def explode(self, all_targets):
+        """
+        引爆手榴彈，對範圍內所有目標造成傷害\n
+        \n
+        參數:\n
+        all_targets (list): 所有可能受到傷害的目標列表（包括玩家）\n
+        \n
+        回傳:\n
+        list: 受到傷害的目標資訊列表\n
+        """
+        if not self.is_active:
+            return []
+
+        explosion_results = []
+
+        # 計算爆炸中心點
+        explosion_x = self.x + self.width // 2
+        explosion_y = self.y + self.height // 2
+
+        # 檢查範圍內的所有目標
+        for target in all_targets:
+            if hasattr(target, "x") and hasattr(target, "y"):
+                # 計算目標中心點
+                target_x = target.x + getattr(target, "width", 0) // 2
+                target_y = target.y + getattr(target, "height", 0) // 2
+
+                # 計算距離
+                distance = math.sqrt(
+                    (target_x - explosion_x) ** 2 + (target_y - explosion_y) ** 2
+                )
+
+                # 如果在爆炸範圍內
+                if distance <= self.explosion_radius:
+                    explosion_results.append(
+                        {
+                            "target": target,
+                            "damage": self.damage,
+                            "explosion_x": explosion_x,
+                            "explosion_y": explosion_y,
+                            "distance": distance,
+                        }
+                    )
+
+        # 引爆後手榴彈失效
+        self.is_active = False
+
+        return explosion_results
+
+    def draw(self, screen, camera_x=0, camera_y=0):
+        """
+        繪製手榴彈\n
+        \n
+        參數:\n
+        screen (pygame.Surface): 要繪製到的螢幕表面\n
+        camera_x (int): 攝影機 x 偏移\n
+        camera_y (int): 攝影機 y 偏移\n
+        """
+        if not self.is_active:
+            return
+
+        # 計算螢幕座標
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # 只有在螢幕範圍內才繪製
+        if (
+            screen_x < -self.width
+            or screen_x > SCREEN_WIDTH
+            or screen_y < -self.height
+            or screen_y > SCREEN_HEIGHT
+        ):
+            return
+
+        center_x = int(screen_x + self.width // 2)
+        center_y = int(screen_y + self.height // 2)
+        radius = self.width // 2
+
+        # 繪製手榴彈本體（深綠色圓形）
+        pygame.draw.circle(screen, self.color, (center_x, center_y), radius)
+
+        # 如果已黏附，繪製黏附狀態指示器
+        if self.is_attached:
+            # 繪製橘色邊框表示已黏附
+            pygame.draw.circle(screen, ORANGE, (center_x, center_y), radius + 2, 2)
+            # 繪製白色中心點
+            pygame.draw.circle(screen, WHITE, (center_x, center_y), radius // 3)
+        else:
+            # 飛行中，繪製軌跡效果
+            pygame.draw.circle(screen, WHITE, (center_x, center_y), radius // 2)
+
+
 ######################武器管理器類別######################
 
 
@@ -403,11 +748,15 @@ class WeaponManager:
     2. 子彈與目標的碰撞檢測\n
     3. 近戰攻擊的處理\n
     4. 武器系統的整體更新\n
+    5. 手榴彈系統的管理\n
     """
 
     def __init__(self):
         self.bullets = []  # 所有活躍的子彈列表
         self.lightning_bullets = []  # 雷電追蹤子彈列表
+        self.grenades = []  # 所有活躍的手榴彈列表
+        self.grenade_count = GRENADE_MAX_COUNT  # 玩家剩餘手榴彈數量
+        self.explosion_effects = []  # 爆炸視覺效果列表
 
     def create_bullet(self, bullet_info):
         """
@@ -628,6 +977,98 @@ class WeaponManager:
 
         return hit_targets
 
+    def create_grenade(self, grenade_info):
+        """
+        創建新手榴彈 - 檢查數量限制\n
+        \n
+        參數:\n
+        grenade_info (dict): 手榴彈資訊，包含起始位置和投擲方向\n
+        \n
+        回傳:\n
+        bool: 是否成功創建手榴彈\n
+        """
+        if grenade_info is None or self.grenade_count <= 0:
+            return False
+
+        # 創建新手榴彈
+        grenade = Grenade(
+            grenade_info["start_x"],
+            grenade_info["start_y"],
+            grenade_info["direction_x"],
+            grenade_info["direction_y"],
+        )
+
+        self.grenades.append(grenade)
+        self.grenade_count -= 1  # 減少可用手榴彈數量
+
+        return True
+
+    def explode_all_grenades(self, all_targets):
+        """
+        引爆所有活躍的手榴彈 - 右鍵觸發\n
+        \n
+        參數:\n
+        all_targets (list): 所有可能受到傷害的目標列表（包括玩家和怪物）\n
+        \n
+        回傳:\n
+        list: 所有爆炸造成的傷害結果\n
+        """
+        all_explosion_results = []
+
+        for grenade in self.grenades[:]:  # 使用切片避免在迭代中修改列表
+            if grenade.is_active:
+                explosion_results = grenade.explode(all_targets)
+                all_explosion_results.extend(explosion_results)
+
+                # 創建爆炸視覺效果
+                explosion_effect = ExplosionEffect(
+                    grenade.x + grenade.width // 2,  # 爆炸中心 X
+                    grenade.y + grenade.height // 2,  # 爆炸中心 Y
+                    GRENADE_EXPLOSION_RADIUS,  # 最大爆炸半徑
+                )
+                self.explosion_effects.append(explosion_effect)
+
+        # 移除已爆炸的手榴彈
+        self.grenades = [grenade for grenade in self.grenades if grenade.is_active]
+
+        return all_explosion_results
+
+    def update_grenades(
+        self, platforms=None, targets=None, level_width=None, level_height=None
+    ):
+        """
+        更新所有手榴彈的狀態\n
+        \n
+        參數:\n
+        platforms (list): 平台列表，用於碰撞檢測\n
+        targets (list): 目標列表（怪物等），用於黏附檢測\n
+        level_width (int): 關卡世界寬度\n
+        level_height (int): 關卡世界高度\n
+        """
+        for grenade in self.grenades:
+            grenade.update(platforms, targets, level_width, level_height)
+
+        # 移除非活躍的手榴彈
+        self.grenades = [grenade for grenade in self.grenades if grenade.is_active]
+
+    def get_grenade_count(self):
+        """
+        獲取玩家剩餘手榴彈數量\n
+        \n
+        回傳:\n
+        int: 剩餘手榴彈數量\n
+        """
+        return self.grenade_count
+
+    def get_active_grenades_count(self):
+        """
+        獲取當前場上活躍手榴彈數量\n
+        \n
+        回傳:\n
+        int: 場上手榴彈數量\n
+        """
+        return len([grenade for grenade in self.grenades if grenade.is_active])
+
     def update_bullets(self, targets=None):
         """
         更新所有子彈的狀態 - 移除非活躍的子彈\n
@@ -704,18 +1145,30 @@ class WeaponManager:
 
         return collision_results
 
-    def update(self, targets=None):
+    def update(self, targets=None, platforms=None, level_width=None, level_height=None):
         """
         武器系統的主要更新方法\n
         \n
         參數:\n
         targets (list): 可能的攻擊目標列表\n
+        platforms (list): 平台列表，用於手榴彈碰撞檢測\n
+        level_width (int): 關卡世界寬度\n
+        level_height (int): 關卡世界高度\n
         \n
         回傳:\n
         list: 所有碰撞結果\n
         """
         # 更新所有子彈
         self.update_bullets(targets)
+
+        # 更新所有手榴彈
+        self.update_grenades(platforms, targets, level_width, level_height)
+
+        # 更新爆炸效果
+        for effect in self.explosion_effects[:]:
+            effect.update()
+            if not effect.is_active:
+                self.explosion_effects.remove(effect)
 
         # 檢查子彈碰撞
         collision_results = []
@@ -737,6 +1190,14 @@ class WeaponManager:
         for bullet in self.bullets:
             bullet.draw(screen, camera_x, camera_y)
 
+        # 繪製所有活躍的手榴彈
+        for grenade in self.grenades:
+            grenade.draw(screen, camera_x, camera_y)
+
+        # 繪製所有爆炸效果
+        for effect in self.explosion_effects:
+            effect.draw(screen, camera_x, camera_y)
+
     def get_bullet_count(self):
         """
         獲取當前活躍子彈數量 - 用於性能監控\n
@@ -748,6 +1209,16 @@ class WeaponManager:
 
     def clear_all_bullets(self):
         """
-        清除所有子彈 - 用於關卡重置或遊戲結束\n
+        清除所有子彈和手榴彈 - 用於關卡重置或遊戲結束\n
         """
         self.bullets.clear()
+        self.grenades.clear()
+        self.explosion_effects.clear()
+
+    def reset_grenades(self):
+        """
+        重置手榴彈系統 - 補充滿手榴彈數量\n
+        """
+        self.grenade_count = GRENADE_MAX_COUNT
+        self.grenades.clear()
+        self.explosion_effects.clear()

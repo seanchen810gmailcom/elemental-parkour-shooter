@@ -180,6 +180,11 @@ class Player(GameObject):
         self.last_heal_time = time.time()  # 上次回血時間
         self.heal_amount = 10  # 每次回血量
 
+        # 手榴彈系統
+        self.pending_grenade = None  # 待投擲的手榴彈資訊
+        self.grenade_mode = False  # 是否處於手榴彈瞄準模式
+        self.pending_grenade_explosion = False  # 是否有待引爆的手榴彈
+
     def handle_input(self, keys, mouse_buttons, camera_x=0, camera_y=0):
         """
         處理玩家輸入 - 將鍵盤滑鼠輸入轉換為動作\n
@@ -215,12 +220,29 @@ class Player(GameObject):
                 self.pending_bullet = bullet_info
         self.keys_pressed["shoot"] = shoot_input
 
-        # 甩槍攻擊（滑鼠右鍵）- 修正按鍵檢測邏輯
+        # 甩槍攻擊和引爆手榴彈（滑鼠右鍵）- 修正按鍵檢測邏輯
         melee_input = mouse_buttons[2]  # 滑鼠右鍵狀態
         if melee_input and not self.keys_pressed["melee"]:
-            # 按鍵從沒按下變成按下，觸發甩槍攻擊
+            # 按鍵從沒按下變成按下，觸發甩槍攻擊或引爆手榴彈
             self.melee_attack()
+            # 同時標記引爆手榴彈
+            self.pending_grenade_explosion = True
         self.keys_pressed["melee"] = melee_input
+
+        # 手榴彈投擲（G鍵）- 修正按鍵檢測邏輯
+        grenade_input = keys[pygame.K_g]
+        if grenade_input and not getattr(self, "prev_key_g", False):
+            # 按鍵從沒按下變成按下，投擲手榴彈
+            grenade_info = self.throw_grenade(camera_x, camera_y)
+            if grenade_info:
+                self.pending_grenade = grenade_info
+        self.prev_key_g = grenade_input
+
+        # 手榴彈瞄準模式切換（H鍵）- 讓玩家能夠開啟瞄準模式
+        grenade_aim_input = keys[pygame.K_h]
+        if grenade_aim_input and not getattr(self, "prev_key_h", False):
+            self.grenade_mode = not self.grenade_mode
+        self.prev_key_h = grenade_aim_input
 
         # 武器切換 - 修正按鍵檢測，避免重複觸發
         if keys[pygame.K_1] and not getattr(self, "prev_key_1", False):
@@ -403,6 +425,63 @@ class Player(GameObject):
 
         self.last_shot_time = current_time
         return bullets
+
+    def throw_grenade(self, camera_x=0, camera_y=0):
+        """
+        投擲手榴彈 - 使用狙擊槍準心進行精確瞄準\n
+        \n
+        手榴彈特性：\n
+        1. 拋物線飛行軌跡\n
+        2. 可黏附在任何物體上\n
+        3. 使用狙擊槍相同的準心系統\n
+        4. 玩家最多只能有5顆\n
+        \n
+        參數:\n
+        camera_x (int): 攝影機 x 偏移，用於正確計算滑鼠世界座標\n
+        camera_y (int): 攝影機 y 偏移，用於正確計算滑鼠世界座標\n
+        \n
+        回傳:\n
+        dict or None: 成功投擲回傳手榴彈資訊，無手榴彈時回傳 None\n
+        """
+        # 獲取滑鼠位置來決定投擲方向
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+
+        # 將滑鼠的螢幕座標轉換為世界座標
+        world_mouse_x = mouse_x + camera_x
+        world_mouse_y = mouse_y + camera_y
+
+        # 計算從玩家中心到滑鼠世界位置的方向向量
+        player_center_x = self.x + self.width // 2
+        player_center_y = self.y + self.height // 2
+
+        direction_x = world_mouse_x - player_center_x
+        direction_y = world_mouse_y - player_center_y
+
+        # 正規化方向向量（讓長度變成1）
+        distance = math.sqrt(direction_x**2 + direction_y**2)
+        if distance > 0:
+            direction_x /= distance
+            direction_y /= distance
+        else:
+            # 如果滑鼠就在玩家身上，預設向右投擲
+            direction_x = self.facing_direction
+            direction_y = -0.5  # 稍微向上投擲
+
+        # 更新面向方向
+        if direction_x > 0:
+            self.facing_direction = 1
+        elif direction_x < 0:
+            self.facing_direction = -1
+
+        # 創建手榴彈資訊
+        grenade_info = {
+            "start_x": player_center_x,
+            "start_y": player_center_y,
+            "direction_x": direction_x,
+            "direction_y": direction_y,
+        }
+
+        return grenade_info
 
     def get_gun_muzzle_position(self, camera_x=0, camera_y=0):
         """
@@ -1010,6 +1089,32 @@ class Player(GameObject):
         ultimate_info = self.pending_ultimate
         self.pending_ultimate = None
         return ultimate_info
+
+    def get_pending_grenade(self):
+        """
+        取得待投擲的手榴彈並清除
+
+        回傳:
+        dict or None: 手榴彈資訊或 None
+        """
+        grenade_info = self.pending_grenade
+        self.pending_grenade = None
+        return grenade_info
+
+    def get_pending_grenade_explosion(self):
+        """
+        檢查是否有待引爆的手榴彈
+
+        回傳:
+        bool: 是否有待引爆的手榴彈
+        """
+        return self.pending_grenade_explosion
+
+    def reset_grenade_explosion_flag(self):
+        """
+        重置手榴彈引爆標記
+        """
+        self.pending_grenade_explosion = False
 
     def get_ultimate_cooldown_ratio(self):
         """
@@ -1830,7 +1935,7 @@ class Player(GameObject):
 
     def draw_crosshair(self, screen, camera_x=0, camera_y=0):
         """
-        繪製狙擊槍準心 - 使用自訂圖片或預設十字準心\n
+        繪製狙擊槍準心和手榴彈瞄準準心 - 使用自訂圖片或預設十字準心\n
         \n
         參數:\n
         screen (pygame.Surface): 要繪製到的螢幕表面\n
@@ -1838,12 +1943,13 @@ class Player(GameObject):
         camera_y (int): 攝影機 y 偏移\n
         \n
         繪製邏輯:\n
-        1. 只在使用狙擊槍時顯示準心\n
+        1. 在使用狙擊槍或手榴彈瞄準模式時顯示準心\n
         2. 優先使用載入的圖片準心\n
         3. 圖片載入失敗時使用預設十字準心\n
         4. 準心位置跟隨滑鼠游標\n
         """
-        if self.current_weapon != "sniper":
+        # 只在狙擊槍模式或手榴彈瞄準模式下顯示準心
+        if self.current_weapon != "sniper" and not self.grenade_mode:
             return
 
         # 獲取滑鼠位置
@@ -1860,7 +1966,12 @@ class Player(GameObject):
         else:
             # 圖片載入失敗，使用預設十字準心
             crosshair_size = 20
-            crosshair_color = CROSSHAIR_COLOR
+
+            # 手榴彈模式使用綠色準心，狙擊槍使用紅色準心
+            if self.grenade_mode:
+                crosshair_color = GRENADE_COLOR  # 深綠色
+            else:
+                crosshair_color = CROSSHAIR_COLOR  # 紅色
 
             # 水平線
             pygame.draw.line(

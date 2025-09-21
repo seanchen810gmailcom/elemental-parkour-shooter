@@ -367,6 +367,12 @@ class ElementalParkourShooter:
                     if self.game_state in ["game_over", "victory", "death_screen"]:
                         self.reset_game()
                         print("🔄 玩家按下 R 鍵，遊戲重新開始")
+                elif event.key == pygame.K_t:
+                    # 按 T 鍵測試GameOver功能
+                    if self.game_state == "playing":
+                        print("🧪 測試按鍵：強制觸發玩家死亡")
+                        self.player.health = 0
+                        self.player.is_alive = False
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # 處理滑鼠點擊事件 - 只在遊戲進行時處理
@@ -453,22 +459,24 @@ class ElementalParkourShooter:
             self.last_update_time = current_time
             self.dt = dt  # 儲存為實例變數以供其他方法使用
 
-            # 更新玩家狀態
-            if self.player.is_alive:
-                # 使用關卡管理器的平台資料
-                platforms = self.level_manager.get_platforms()
-                player_update_result = self.player.update(platforms)
+            # 使用關卡管理器的平台資料
+            platforms = self.level_manager.get_platforms()
 
-                # 檢查玩家更新結果（可能包含死亡資訊）
-                if player_update_result and player_update_result.get(
-                    "game_over", False
-                ):
-                    # 玩家死亡直接遊戲結束
-                    self.play_game_over_sound()  # 播放死亡音效
-                    self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
-                    self.game_state = "game_over"
-                    self.game_over_time = time.time()
-                    print("💀 遊戲結束！")
+            # 更新玩家狀態（無論是否存活都要更新以檢查死亡狀態）
+            player_update_result = self.player.update(platforms)
+
+            # 檢查玩家更新結果（可能包含死亡資訊）
+            if player_update_result and player_update_result.get("game_over", False):
+                # 玩家死亡直接遊戲結束
+                self.play_game_over_sound()  # 播放死亡音效
+                self.stop_sniper_incoming_music()  # 強制停止大怪來襲音樂
+                self.game_state = "game_over"
+                self.game_over_time = time.time()
+                print("💀 遊戲結束！")
+                return  # 直接返回，不再執行其他更新邏輯
+
+            # 只有在玩家存活時才執行遊戲邏輯
+            if self.player.is_alive:
 
                 # 檢查玩家與陷阱的碰撞（現在沒有危險陷阱）
                 hazard_damage = self.level_manager.check_hazard_collisions(self.player)
@@ -533,6 +541,62 @@ class ElementalParkourShooter:
                             )
                     else:
                         print("⚡ 雷電追蹤攻擊發動！(無目標模式)")
+
+                # 處理玩家的手榴彈投擲 - 檢查是否有待投擲的手榴彈
+                grenade_info = self.player.get_pending_grenade()
+                if grenade_info:
+                    success = self.weapon_manager.create_grenade(grenade_info)
+                    if success:
+                        print(
+                            f"💣 手榴彈投擲成功！剩餘: {self.weapon_manager.get_grenade_count()}"
+                        )
+                    else:
+                        print("💣 手榴彈投擲失敗（無剩餘手榴彈）")
+
+                # 處理手榴彈引爆 - 檢查是否觸發右鍵引爆
+                if self.player.get_pending_grenade_explosion():
+                    # 獲取所有可能受傷的目標（包括玩家和怪物）
+                    explosion_targets = [self.player]  # 玩家也可能被炸傷
+                    explosion_targets.extend(self.monster_manager.monsters)
+                    if self.monster_manager.boss:
+                        explosion_targets.append(self.monster_manager.boss)
+
+                    # 引爆所有手榴彈
+                    explosion_results = self.weapon_manager.explode_all_grenades(
+                        explosion_targets
+                    )
+
+                    if explosion_results:
+                        total_explosions = len([r for r in explosion_results if r])
+                        print(f"💥 手榴彈爆炸！造成 {total_explosions} 次傷害")
+
+                        # 處理爆炸傷害
+                        for result in explosion_results:
+                            if result and "target" in result:
+                                target = result["target"]
+                                damage = result["damage"]
+
+                                # 對目標造成傷害
+                                if hasattr(target, "take_damage"):
+                                    target.take_damage(damage)
+
+                                    # 顯示傷害數字
+                                    self.damage_display.add_damage_number(
+                                        result.get("explosion_x", 0),
+                                        result.get("explosion_y", 0),
+                                        damage,
+                                    )
+
+                                    # 如果目標是怪物，增加分數
+                                    if target != self.player:
+                                        self.score += (
+                                            damage // 2
+                                        )  # 手榴彈傷害的一半作為分數
+                    else:
+                        print("💥 引爆手榴彈，但沒有手榴彈可以爆炸")
+
+                    # 重置引爆標記
+                    self.player.reset_grenade_explosion_flag()
 
                 # 處理玩家的近戰攻擊
                 melee_info = (
@@ -684,7 +748,19 @@ class ElementalParkourShooter:
             if self.monster_manager.boss:
                 all_targets.append(self.monster_manager.boss)
 
-            collision_results = self.weapon_manager.update(targets=all_targets)
+            # 獲取關卡平台用於手榴彈碰撞檢測
+            platforms = (
+                self.level_manager.platforms
+                if hasattr(self.level_manager, "platforms")
+                else []
+            )
+
+            collision_results = self.weapon_manager.update(
+                targets=all_targets,
+                platforms=platforms,
+                level_width=self.level_manager.level_width,
+                level_height=self.level_manager.level_height,
+            )
 
             # 處理子彈碰撞結果
             for collision in collision_results:
@@ -1076,6 +1152,9 @@ class ElementalParkourShooter:
             self.player.draw_bullet_ui(self.screen)
             self.player.draw_ultimate_ui(self.screen)
 
+            # 繪製手榴彈計數UI
+            self.draw_grenade_ui()
+
             # 繪製分數（恢復到原始位置）
             score_font = get_chinese_font(FONT_SIZE_MEDIUM)
             score_text = score_font.render(f"分數: {self.score}", True, WHITE)
@@ -1237,6 +1316,64 @@ class ElementalParkourShooter:
             self.sniper_music_channels.clear()
             self.is_sniper_music_playing = False
             print("🎵 狙擊怪音樂已停止")
+
+    def draw_grenade_ui(self):
+        """
+        繪製手榴彈計數和模式UI\n
+        \n
+        顯示內容：\n
+        1. 剩餘手榴彈數量\n
+        2. 場上活躍手榴彈數量\n
+        3. 手榴彈瞄準模式狀態\n
+        4. 操作提示\n
+        """
+        # 獲取手榴彈資訊
+        remaining_count = self.weapon_manager.get_grenade_count()
+        active_count = self.weapon_manager.get_active_grenades_count()
+        grenade_mode = self.player.grenade_mode
+
+        # 設定UI位置（左下角）
+        ui_x = 20
+        ui_y = SCREEN_HEIGHT - 120
+
+        # 繪製背景框
+        ui_width = 200
+        ui_height = 100
+        ui_rect = pygame.Rect(ui_x - 10, ui_y - 10, ui_width, ui_height)
+        pygame.draw.rect(self.screen, (0, 0, 0, 180), ui_rect)  # 半透明黑色背景
+        pygame.draw.rect(self.screen, GRENADE_COLOR, ui_rect, 2)  # 綠色邊框
+
+        # 設定字體
+        font = get_chinese_font(FONT_SIZE_SMALL)
+
+        # 顯示手榴彈標題
+        title_text = font.render("💣 手榴彈系統", True, WHITE)
+        self.screen.blit(title_text, (ui_x, ui_y))
+
+        # 顯示剩餘數量
+        count_text = font.render(f"剩餘: {remaining_count}/5", True, WHITE)
+        self.screen.blit(count_text, (ui_x, ui_y + 20))
+
+        # 顯示場上數量
+        active_text = font.render(f"場上: {active_count}", True, WHITE)
+        self.screen.blit(active_text, (ui_x, ui_y + 40))
+
+        # 顯示瞄準模式狀態
+        if grenade_mode:
+            mode_text = font.render("瞄準模式: 開啟", True, GREEN)
+        else:
+            mode_text = font.render("瞄準模式: 關閉", True, GRAY)
+        self.screen.blit(mode_text, (ui_x, ui_y + 60))
+
+        # 顯示操作提示（右側）
+        tip_x = ui_x + ui_width + 20
+        tip_font = get_chinese_font(FONT_SIZE_TINY)
+
+        tips = ["G - 投擲手榴彈", "H - 切換瞄準模式", "右鍵 - 引爆所有手榴彈"]
+
+        for i, tip in enumerate(tips):
+            tip_text = tip_font.render(tip, True, WHITE)
+            self.screen.blit(tip_text, (tip_x, ui_y + i * 15))
 
     def run(self):
         """

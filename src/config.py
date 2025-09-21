@@ -110,6 +110,24 @@ WEAPON_SWING_CONFIGS = {
     },
 }
 
+# 手榴彈系統設定
+GRENADE_SIZE = 12  # 手榴彈尺寸
+GRENADE_COLOR = (50, 150, 50)  # 深綠色
+GRENADE_SPEED = 10  # 手榴彈飛行速度
+GRENADE_DAMAGE = 200  # 爆炸傷害
+GRENADE_EXPLOSION_RADIUS = 400  # 4公分爆炸範圍（以像素為單位，實際遊戲中需要更大範圍）
+GRENADE_MAX_COUNT = 5  # 玩家最大手榴彈數量
+GRENADE_GRAVITY = 0.3  # 手榴彈重力影響（讓拋物線更真實）
+
+# 爆炸視覺效果設定
+EXPLOSION_DURATION = 0.5  # 爆炸效果持續時間（秒）
+EXPLOSION_COLORS = [
+    (255, 255, 0),  # 黃色（爆炸中心）
+    (255, 165, 0),  # 橘色（中層）
+    (255, 69, 0),  # 紅橘色（外層）
+    (255, 0, 0),  # 紅色（最外層）
+]
+
 ######################怪物設定######################
 
 # 岩漿怪
