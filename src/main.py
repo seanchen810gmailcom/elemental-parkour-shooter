@@ -3,6 +3,7 @@ import pygame
 import sys
 import time
 import os
+import math
 
 # 添加父目錄到路徑，支援直接執行
 if __name__ == "__main__":
@@ -1144,6 +1145,9 @@ class ElementalParkourShooter:
             if self.player.is_alive:
                 self.player.draw(self.screen, self.camera_x, self.camera_y)
 
+            # 繪製手榴彈拋物線軌跡（在玩家繪製後，準心之前）
+            self.draw_grenade_trajectory()
+
             # 繪製狙擊槍準心（在最上層）
             self.player.draw_crosshair(self.screen, self.camera_x, self.camera_y)
 
@@ -1317,6 +1321,116 @@ class ElementalParkourShooter:
             self.is_sniper_music_playing = False
             print("🎵 狙擊怪音樂已停止")
 
+    def draw_grenade_trajectory(self):
+        """
+        繪製手榴彈拋物線軌跡預測路徑 - 只在手榴彈模式下顯示\n
+        \n
+        特性：\n
+        1. 只在手榴彈模式下顯示軌跡\n
+        2. 考慮重力影響的真實拋物線\n
+        3. 檢測平台碰撞，在碰撞點停止\n
+        4. 使用虛線效果增加視覺美感\n
+        """
+        # 檢查是否應該顯示軌跡：玩家存活 + 手榴彈模式
+        if not self.player.is_alive or not self.player.grenade_mode:
+            return
+
+        # 獲取平台資訊用於碰撞檢測
+        platforms = self.level_manager.get_platforms()
+
+        # 計算軌跡路徑
+        trajectory_points = self.player.calculate_grenade_trajectory(
+            self.camera_x, self.camera_y, platforms, max_points=50
+        )
+
+        if len(trajectory_points) < 2:
+            return
+
+        # 繪製虛線軌跡
+        dash_length = 8  # 虛線段長度
+        gap_length = 6  # 虛線間隔長度
+
+        for i in range(len(trajectory_points) - 1):
+            start_point = trajectory_points[i]
+            end_point = trajectory_points[i + 1]
+
+            # 轉換為螢幕座標
+            screen_start = (
+                start_point[0] - self.camera_x,
+                start_point[1] - self.camera_y,
+            )
+            screen_end = (end_point[0] - self.camera_x, end_point[1] - self.camera_y)
+
+            # 只繪製在螢幕範圍內的線段
+            if (
+                screen_start[0] < -50
+                or screen_start[0] > SCREEN_WIDTH + 50
+                or screen_start[1] < -50
+                or screen_start[1] > SCREEN_HEIGHT + 50
+            ):
+                continue
+
+            # 計算線段長度和方向
+            dx = screen_end[0] - screen_start[0]
+            dy = screen_end[1] - screen_start[1]
+            line_length = math.sqrt(dx**2 + dy**2)
+
+            if line_length == 0:
+                continue
+
+            # 正規化方向向量
+            unit_x = dx / line_length
+            unit_y = dy / line_length
+
+            # 繪製虛線效果
+            current_distance = 0
+            dash_on = True  # 控制虛線的開關
+
+            while current_distance < line_length:
+                if dash_on:
+                    # 繪製實線段
+                    dash_start_x = screen_start[0] + unit_x * current_distance
+                    dash_start_y = screen_start[1] + unit_y * current_distance
+                    dash_end_distance = min(current_distance + dash_length, line_length)
+                    dash_end_x = screen_start[0] + unit_x * dash_end_distance
+                    dash_end_y = screen_start[1] + unit_y * dash_end_distance
+
+                    # 軌跡顏色隨著距離漸變（綠色到黃色到紅色）
+                    distance_ratio = i / max(len(trajectory_points) - 1, 1)
+
+                    if distance_ratio < 0.5:
+                        # 前半段：綠色到黃色
+                        color_ratio = distance_ratio * 2
+                        color = (
+                            int(
+                                GRENADE_COLOR[0]
+                                + (255 - GRENADE_COLOR[0]) * color_ratio
+                            ),
+                            int(GRENADE_COLOR[1]),
+                            int(GRENADE_COLOR[2] * (1 - color_ratio)),
+                        )
+                    else:
+                        # 後半段：黃色到紅色
+                        color_ratio = (distance_ratio - 0.5) * 2
+                        color = (255, int(255 * (1 - color_ratio)), 0)
+
+                    # 繪製線段，線寬隨距離變細
+                    line_width = max(1, 3 - int(distance_ratio * 2))
+                    pygame.draw.line(
+                        self.screen,
+                        color,
+                        (int(dash_start_x), int(dash_start_y)),
+                        (int(dash_end_x), int(dash_end_y)),
+                        line_width,
+                    )
+
+                    current_distance = dash_end_distance
+                else:
+                    # 跳過間隔
+                    current_distance += gap_length
+
+                dash_on = not dash_on
+
     def draw_grenade_ui(self):
         """
         繪製手榴彈計數和模式UI\n
@@ -1334,11 +1448,11 @@ class ElementalParkourShooter:
 
         # 設定UI位置（左下角）
         ui_x = 20
-        ui_y = SCREEN_HEIGHT - 120
+        ui_y = SCREEN_HEIGHT - 100  # 減少高度
 
         # 繪製背景框
         ui_width = 200
-        ui_height = 100
+        ui_height = 80  # 減少高度
         ui_rect = pygame.Rect(ui_x - 10, ui_y - 10, ui_width, ui_height)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), ui_rect)  # 半透明黑色背景
         pygame.draw.rect(self.screen, GRENADE_COLOR, ui_rect, 2)  # 綠色邊框
@@ -1358,18 +1472,22 @@ class ElementalParkourShooter:
         active_text = font.render(f"場上: {active_count}", True, WHITE)
         self.screen.blit(active_text, (ui_x, ui_y + 40))
 
-        # 顯示瞄準模式狀態
+        # 顯示手榴彈模式狀態
         if grenade_mode:
-            mode_text = font.render("瞄準模式: 開啟", True, GREEN)
+            mode_text = font.render("手榴彈模式: 開啟", True, GREEN)
         else:
-            mode_text = font.render("瞄準模式: 關閉", True, GRAY)
+            mode_text = font.render("手榴彈模式: 關閉", True, GRAY)
         self.screen.blit(mode_text, (ui_x, ui_y + 60))
 
         # 顯示操作提示（右側）
         tip_x = ui_x + ui_width + 20
         tip_font = get_chinese_font(FONT_SIZE_TINY)
 
-        tips = ["G - 投擲手榴彈", "H - 切換瞄準模式", "右鍵 - 引爆所有手榴彈"]
+        tips = [
+            "H - 切換手榴彈模式",
+            "左鍵 - 投擲手榴彈(手榴彈模式下)",
+            "右鍵 - 引爆所有手榴彈",
+        ]
 
         for i, tip in enumerate(tips):
             tip_text = tip_font.render(tip, True, WHITE)

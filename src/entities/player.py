@@ -212,12 +212,20 @@ class Player(GameObject):
             self.jump()
         self.keys_pressed["jump"] = jump_input
 
-        # 射擊輸入（滑鼠左鍵）- 支援連續射擊，現在傳遞攝影機偏移
+        # 射擊輸入（滑鼠左鍵）- 在手榴彈模式下投擲手榴彈，否則射擊
         shoot_input = mouse_buttons[0]  # 滑鼠左鍵狀態
-        if shoot_input:  # 按住滑鼠左鍵連續射擊
-            bullet_info = self.shoot(camera_x, camera_y)
-            if bullet_info:
-                self.pending_bullet = bullet_info
+        if shoot_input and not self.keys_pressed["shoot"]:
+            # 按鍵從沒按下變成按下
+            if self.grenade_mode:
+                # 手榴彈模式：投擲手榴彈
+                grenade_info = self.throw_grenade(camera_x, camera_y)
+                if grenade_info:
+                    self.pending_grenade = grenade_info
+            else:
+                # 普通模式：射擊子彈
+                bullet_info = self.shoot(camera_x, camera_y)
+                if bullet_info:
+                    self.pending_bullet = bullet_info
         self.keys_pressed["shoot"] = shoot_input
 
         # 甩槍攻擊和引爆手榴彈（滑鼠右鍵）- 修正按鍵檢測邏輯
@@ -228,15 +236,6 @@ class Player(GameObject):
             # 同時標記引爆手榴彈
             self.pending_grenade_explosion = True
         self.keys_pressed["melee"] = melee_input
-
-        # 手榴彈投擲（G鍵）- 修正按鍵檢測邏輯
-        grenade_input = keys[pygame.K_g]
-        if grenade_input and not getattr(self, "prev_key_g", False):
-            # 按鍵從沒按下變成按下，投擲手榴彈
-            grenade_info = self.throw_grenade(camera_x, camera_y)
-            if grenade_info:
-                self.pending_grenade = grenade_info
-        self.prev_key_g = grenade_input
 
         # 手榴彈瞄準模式切換（H鍵）- 讓玩家能夠開啟瞄準模式
         grenade_aim_input = keys[pygame.K_h]
@@ -482,6 +481,109 @@ class Player(GameObject):
         }
 
         return grenade_info
+
+    def calculate_grenade_trajectory(
+        self, camera_x=0, camera_y=0, platforms=None, max_points=30
+    ):
+        """
+        計算手榴彈拋物線軌跡預測路徑 - 用於顯示虛線軌跡\n
+        \n
+        參數:\n
+        camera_x (int): 攝影機 x 偏移，用於正確計算滑鼠世界座標\n
+        camera_y (int): 攝影機 y 偏移，用於正確計算滑鼠世界座標\n
+        platforms (list): 平台列表，用於碰撞檢測\n
+        max_points (int): 最大預測點數，防止路徑過長\n
+        \n
+        回傳:\n
+        list: 軌跡點列表 [(x1, y1), (x2, y2), ...] 或空列表\n
+        \n
+        說明:\n
+        - 模擬真實的重力影響和拋物線飛行\n
+        - 考慮平台碰撞，路徑在碰撞點終止\n
+        - 只在手榴彈模式下計算路徑\n
+        """
+        if not self.grenade_mode:
+            return []
+
+        # 獲取滑鼠位置來決定投擲方向
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+
+        # 將滑鼠的螢幕座標轉換為世界座標
+        world_mouse_x = mouse_x + camera_x
+        world_mouse_y = mouse_y + camera_y
+
+        # 計算從玩家中心到滑鼠世界位置的方向向量
+        player_center_x = self.x + self.width // 2
+        player_center_y = self.y + self.height // 2
+
+        direction_x = world_mouse_x - player_center_x
+        direction_y = world_mouse_y - player_center_y
+
+        # 正規化方向向量（讓長度變成1）
+        distance = math.sqrt(direction_x**2 + direction_y**2)
+        if distance > 0:
+            direction_x /= distance
+            direction_y /= distance
+        else:
+            # 如果滑鼠就在玩家身上，預設向右投擲
+            direction_x = self.facing_direction
+            direction_y = -0.5
+
+        # 模擬手榴彈初始速度
+        velocity_x = direction_x * GRENADE_SPEED
+        velocity_y = direction_y * GRENADE_SPEED
+
+        # 模擬軌跡計算
+        trajectory_points = []
+        current_x = player_center_x
+        current_y = player_center_y
+
+        # 每幀的物理更新（與實際手榴彈邏輯一致）
+        for i in range(max_points):
+            # 記錄當前位置
+            trajectory_points.append((current_x, current_y))
+
+            # 套用重力（與實際手榴彈 update 方法一致）
+            velocity_y += GRENADE_GRAVITY
+
+            # 更新位置（與實際手榴彈 update 方法一致）
+            next_x = current_x + velocity_x
+            next_y = current_y + velocity_y
+
+            # 檢查平台碰撞
+            if platforms:
+                collision_detected = False
+                temp_rect = pygame.Rect(
+                    next_x - GRENADE_SIZE // 2,
+                    next_y - GRENADE_SIZE // 2,
+                    GRENADE_SIZE,
+                    GRENADE_SIZE,
+                )
+
+                for platform in platforms:
+                    if hasattr(platform, "rect") and temp_rect.colliderect(
+                        platform.rect
+                    ):
+                        collision_detected = True
+                        break
+
+                if collision_detected:
+                    # 在碰撞點結束軌跡
+                    trajectory_points.append((next_x, next_y))
+                    break
+
+            # 檢查是否飛出合理範圍
+            if (
+                abs(next_x - player_center_x) > 1000
+                or abs(next_y - player_center_y) > 800
+            ):
+                break
+
+            # 更新位置
+            current_x = next_x
+            current_y = next_y
+
+        return trajectory_points
 
     def get_gun_muzzle_position(self, camera_x=0, camera_y=0):
         """
