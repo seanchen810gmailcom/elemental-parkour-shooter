@@ -214,18 +214,37 @@ class Player(GameObject):
 
         # 射擊輸入（滑鼠左鍵）- 在手榴彈模式下投擲手榴彈，否則射擊
         shoot_input = mouse_buttons[0]  # 滑鼠左鍵狀態
-        if shoot_input and not self.keys_pressed["shoot"]:
-            # 按鍵從沒按下變成按下
-            if self.grenade_mode:
-                # 手榴彈模式：投擲手榴彈
-                grenade_info = self.throw_grenade(camera_x, camera_y)
-                if grenade_info:
-                    self.pending_grenade = grenade_info
-            else:
-                # 普通模式：射擊子彈
-                bullet_info = self.shoot(camera_x, camera_y)
-                if bullet_info:
-                    self.pending_bullet = bullet_info
+
+        # 機關槍特殊處理：支援長按連射
+        if self.current_weapon == "machine_gun":
+            # 機關槍：只要按住就持續射擊（受射速限制）
+            if shoot_input:
+                if self.grenade_mode:
+                    # 手榴彈模式：只在按鍵剛按下時投擲
+                    if not self.keys_pressed["shoot"]:
+                        grenade_info = self.throw_grenade(camera_x, camera_y)
+                        if grenade_info:
+                            self.pending_grenade = grenade_info
+                else:
+                    # 普通模式：連續射擊（由射速控制間隔）
+                    bullet_info = self.shoot(camera_x, camera_y)
+                    if bullet_info:
+                        self.pending_bullet = bullet_info
+        else:
+            # 其他武器：只在按鍵剛按下時射擊一次
+            if shoot_input and not self.keys_pressed["shoot"]:
+                # 按鍵從沒按下變成按下
+                if self.grenade_mode:
+                    # 手榴彈模式：投擲手榴彈
+                    grenade_info = self.throw_grenade(camera_x, camera_y)
+                    if grenade_info:
+                        self.pending_grenade = grenade_info
+                else:
+                    # 普通模式：射擊子彈
+                    bullet_info = self.shoot(camera_x, camera_y)
+                    if bullet_info:
+                        self.pending_bullet = bullet_info
+
         self.keys_pressed["shoot"] = shoot_input
 
         # 甩槍攻擊和引爆手榴彈（滑鼠右鍵）- 修正按鍵檢測邏輯

@@ -18,7 +18,7 @@ try:
     from .systems.monster_manager import MonsterManager
     from .systems.damage_display import DamageDisplayManager
     from .systems.level_system import LevelManager
-    from .utils.cloud_system import CloudSystem
+    from .utils.cloud_system import CloudSystemf
 except ImportError:
     # 直接執行時使用絕對導入
     from src.config import *
