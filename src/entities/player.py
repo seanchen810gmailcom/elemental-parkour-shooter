@@ -1247,7 +1247,7 @@ class Player(GameObject):
         # hack 模式下玩家擁有無限血量，不會受到任何傷害
         if self.hack_mode:
             return {"health_lost": False, "died": False, "game_over": False}
-        
+
         self.health -= damage
         result = {"health_lost": True, "died": False, "game_over": False}
 
