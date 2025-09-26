@@ -757,6 +757,9 @@ class WeaponManager:
         self.grenades = []  # 所有活躍的手榴彈列表
         self.grenade_count = GRENADE_MAX_COUNT  # 玩家剩餘手榴彈數量
         self.explosion_effects = []  # 爆炸視覺效果列表
+        
+        # hack 模式 - 作弊功能開關
+        self.hack_mode = False
 
     def create_bullet(self, bullet_info):
         """
@@ -987,7 +990,8 @@ class WeaponManager:
         回傳:\n
         bool: 是否成功創建手榴彈\n
         """
-        if grenade_info is None or self.grenade_count <= 0:
+        # hack 模式下忽略手榴彈數量限制
+        if grenade_info is None or (not self.hack_mode and self.grenade_count <= 0):
             return False
 
         # 創建新手榴彈
@@ -999,7 +1003,10 @@ class WeaponManager:
         )
 
         self.grenades.append(grenade)
-        self.grenade_count -= 1  # 減少可用手榴彈數量
+        
+        # hack 模式下不消耗手榴彈
+        if not self.hack_mode:
+            self.grenade_count -= 1  # 減少可用手榴彈數量
 
         return True
 

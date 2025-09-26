@@ -157,6 +157,12 @@ class ElementalParkourShooter:
         self.running = True
         self.game_over_time = 0  # 進入遊戲結束狀態的時間
 
+        # hack 模式管理
+        self.hack_mode = False  # hack 模式開關
+        self.prev_key_0 = False  # 記錄0鍵的前一幀狀態
+        self.hack_monster_spawn_timer = 0  # hack 模式怪物生成計時器
+        self.hack_monster_spawn_interval = 0.5  # hack 模式每0.5秒生成兩隻怪（每秒四隻）
+
         # 遊戲進度管理（簡化為只有一個跑酷關卡）
         self.star_collected = False
 
@@ -198,6 +204,96 @@ class ElementalParkourShooter:
         )
         self.camera_y = max(
             0, min(target_camera_y, self.level_manager.level_height - SCREEN_HEIGHT)
+        )
+
+    def toggle_hack_mode(self):
+        """
+        切換 hack 模式 - 開啟或關閉作弊功能\n
+        \n
+        hack 模式功能：\n
+        1. 機關槍自動追蹤敵人\n
+        2. 狙擊槍無冷卻時間\n
+        3. 無限手榴彈\n
+        4. 必殺技無冷卻時間\n
+        5. 無限血量（不會受到傷害）\n
+        6. 每0.5秒生成兩隻小怪\n
+        """
+        if self.hack_mode:
+            print("🎯 開啟 hack 模式功能：")
+            print("  - 機關槍自動追蹤")
+            print("  - 狙擊槍無冷卻時間")
+            print("  - 無限手榴彈")
+            print("  - 必殺技無冷卻時間")
+            print("  - 無限血量（不會受到傷害）")
+            print("  - 每0.5秒生成兩隻小怪")
+
+            # 設定玩家和武器管理器的 hack 模式
+            self.player.hack_mode = True
+            self.weapon_manager.hack_mode = True
+
+            # 立即重置所有冷卻時間
+            self.player.last_ultimate_time = 0
+            self.player.last_shot_time = 0
+
+            # 設定無限手榴彈
+            self.weapon_manager.grenade_count = 9999
+
+            # 重置怪物生成計時器
+            self.hack_monster_spawn_timer = 0
+
+        else:
+            print("❌ 關閉 hack 模式")
+
+            # 關閉玩家和武器管理器的 hack 模式
+            self.player.hack_mode = False
+            self.weapon_manager.hack_mode = False
+
+            # 恢復正常手榴彈數量
+            self.weapon_manager.grenade_count = GRENADE_MAX_COUNT
+
+    def spawn_hack_monsters(self):
+        """
+        hack 模式下生成怪物 - 每0.5秒生成兩隻小怪\n
+        \n
+        生成規則：\n
+        1. 隨機選擇怪物類型\n
+        2. 在玩家附近但不太近的位置生成\n
+        3. 每次生成兩隻怪物\n
+        """
+        import random
+
+        # 如果怪物太多就不生成了（避免性能問題）
+        if len(self.monster_manager.monsters) >= 15:
+            return
+
+        # 獲取玩家位置
+        player_x = self.player.x
+        player_y = self.player.y
+
+        # 怪物類型列表（不包括Boss和龍捲風怪）
+        monster_types = ["lava_monster", "water_monster"]
+
+        # 生成兩隻怪物
+        for i in range(2):
+            # 隨機選擇怪物類型
+            monster_type = random.choice(monster_types)
+
+            # 在玩家周圍隨機位置生成（距離150-400像素）
+            angle = random.uniform(0, 2 * 3.14159)  # 隨機角度
+            distance = random.uniform(150, 400)  # 隨機距離
+
+            spawn_x = player_x + distance * math.cos(angle)
+            spawn_y = player_y + distance * math.sin(angle)
+
+            # 確保不超出關卡邊界
+            spawn_x = max(50, min(spawn_x, self.level_manager.level_width - 50))
+            spawn_y = max(50, min(spawn_y, self.level_manager.level_height - 50))
+
+            # 生成怪物
+            self.monster_manager.spawn_specific_monster(monster_type, spawn_x, spawn_y)
+
+        print(
+            f"🎯 hack 模式生成了2隻怪物，當前怪物數量: {len(self.monster_manager.monsters)}"
         )
 
     def handle_melee_bullet_deflection(self):
@@ -374,6 +470,11 @@ class ElementalParkourShooter:
                         print("🧪 測試按鍵：強制觸發玩家死亡")
                         self.player.health = 0
                         self.player.is_alive = False
+                elif event.key == pygame.K_0:
+                    # 按 0 鍵切換 hack 模式
+                    self.hack_mode = not self.hack_mode
+                    self.toggle_hack_mode()
+                    print(f"🔧 hack 模式: {'開啟' if self.hack_mode else '關閉'}")
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # 處理滑鼠點擊事件 - 只在遊戲進行時處理
@@ -462,6 +563,16 @@ class ElementalParkourShooter:
 
             # 使用關卡管理器的平台資料
             platforms = self.level_manager.get_platforms()
+
+            # hack 模式下為玩家提供怪物資訊用於自動追蹤
+            if self.hack_mode:
+                self.player.set_monster_list(self.monster_manager.monsters)
+
+                # hack 模式下每0.5秒生成兩隻小怪
+                self.hack_monster_spawn_timer += dt
+                if self.hack_monster_spawn_timer >= self.hack_monster_spawn_interval:
+                    self.spawn_hack_monsters()
+                    self.hack_monster_spawn_timer = 0
 
             # 更新玩家狀態（無論是否存活都要更新以檢查死亡狀態）
             player_update_result = self.player.update(platforms)
@@ -1159,6 +1270,9 @@ class ElementalParkourShooter:
             # 繪製手榴彈計數UI
             self.draw_grenade_ui()
 
+            # 繪製 hack 模式狀態
+            self.draw_hack_mode_ui()
+
             # 繪製分數（恢復到原始位置）
             score_font = get_chinese_font(FONT_SIZE_MEDIUM)
             score_text = score_font.render(f"分數: {self.score}", True, WHITE)
@@ -1465,7 +1579,9 @@ class ElementalParkourShooter:
         self.screen.blit(title_text, (ui_x, ui_y))
 
         # 顯示剩餘數量
-        count_text = font.render(f"剩餘: {remaining_count}/5", True, WHITE)
+        count_text = font.render(
+            f"剩餘: {remaining_count}/{GRENADE_MAX_COUNT}", True, WHITE
+        )
         self.screen.blit(count_text, (ui_x, ui_y + 20))
 
         # 顯示場上數量
@@ -1492,6 +1608,46 @@ class ElementalParkourShooter:
         for i, tip in enumerate(tips):
             tip_text = tip_font.render(tip, True, WHITE)
             self.screen.blit(tip_text, (tip_x, ui_y + i * 15))
+
+    def draw_hack_mode_ui(self):
+        """
+        繪製 hack 模式狀態 UI\n
+        \n
+        顯示 hack 模式的開啟狀態和功能說明\n
+        """
+        if not self.hack_mode:
+            return
+
+        # UI 位置設定（放在螢幕中上方）
+        ui_x = SCREEN_WIDTH // 2 - 150
+        ui_y = 20
+        ui_width = 300
+        ui_height = 80
+
+        # 繪製背景框
+        ui_rect = pygame.Rect(ui_x - 10, ui_y - 10, ui_width, ui_height)
+        pygame.draw.rect(self.screen, (128, 0, 128, 180), ui_rect)  # 半透明紫色背景
+        pygame.draw.rect(self.screen, RED, ui_rect, 3)  # 紅色邊框
+
+        # 設定字體
+        font = get_chinese_font(FONT_SIZE_SMALL)
+        title_font = get_chinese_font(FONT_SIZE_MEDIUM)
+
+        # 顯示 hack 模式標題
+        title_text = title_font.render("🔧 HACK 模式啟用", True, RED)
+        title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, ui_y + 15))
+        self.screen.blit(title_text, title_rect)
+
+        # 顯示功能說明
+        features = "機關槍追蹤 | 狙擊槍無冷卻 | 無限手榴彈 | 必殺技無冷卻 | 無限血量 | 快速生怪"
+        feature_text = font.render(features, True, YELLOW)
+        feature_rect = feature_text.get_rect(center=(SCREEN_WIDTH // 2, ui_y + 40))
+        self.screen.blit(feature_text, feature_rect)
+
+        # 顯示關閉提示
+        tip_text = font.render("按 0 鍵關閉 hack 模式", True, WHITE)
+        tip_rect = tip_text.get_rect(center=(SCREEN_WIDTH // 2, ui_y + 60))
+        self.screen.blit(tip_text, tip_rect)
 
     def run(self):
         """

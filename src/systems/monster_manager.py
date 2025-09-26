@@ -6,10 +6,20 @@ import time
 # 支援直接執行和模組執行兩種方式
 try:
     from ..config import *
-    from ..entities.monsters import LavaMonster, WaterMonster, SniperBoss
+    from ..entities.monsters import (
+        LavaMonster,
+        WaterMonster,
+        SniperBoss,
+        TornadoMonster,
+    )
 except ImportError:
     from src.config import *
-    from src.entities.monsters import LavaMonster, WaterMonster, SniperBoss
+    from src.entities.monsters import (
+        LavaMonster,
+        WaterMonster,
+        SniperBoss,
+        TornadoMonster,
+    )
 
 ######################怪物管理器類別######################
 
@@ -28,8 +38,8 @@ class MonsterManager:
     def __init__(self):
         self.monsters = []  # 所有活躍怪物列表
         self.spawn_timer = 0
-        self.spawn_interval = 3.0  # 生成間隔改為3秒
-        self.max_monsters = 3  # 螢幕上最大怪物數量為3隻
+        self.spawn_interval = 3.0  # 每3秒生成一隻小怪
+        self.max_monsters = 6  # 螢幕上最大怪物數量為6隻
         self.wave_number = 1  # 當前波次
         self.monsters_killed = 0  # 擊殺數量
         self.boss_spawned = False  # Boss是否已生成
@@ -202,6 +212,50 @@ class MonsterManager:
         self.monsters.append(new_monster)
         return new_monster
 
+    def spawn_specific_monster(self, monster_type, x=None, y=None):
+        """
+        在指定位置生成特定類型的怪物 - 用於 hack 模式\n
+        \n
+        參數:\n
+        monster_type (str): 怪物類型 ('lava_monster', 'water_monster', 'tornado_monster')\n
+        x (float): 生成位置 X 座標，None 則隨機\n
+        y (float): 生成位置 Y 座標，None 則隨機\n
+        \n
+        回傳:\n
+        Monster or None: 新生成的怪物，失敗時回傳 None\n
+        """
+        # 怪物類型對應表
+        monster_class_map = {
+            "lava_monster": LavaMonster,
+            "water_monster": WaterMonster,
+            "tornado_monster": TornadoMonster,
+        }
+
+        monster_class = monster_class_map.get(monster_type)
+        if monster_class is None:
+            print(f"❌ 未知的怪物類型: {monster_type}")
+            return None
+
+        # 使用指定位置或隨機位置
+        if x is None or y is None:
+            spawn_x = random.randint(100, 1000)
+            spawn_y = random.randint(100, 600)
+        else:
+            spawn_x = x
+            spawn_y = y
+
+        # 生成怪物
+        new_monster = monster_class(spawn_x, spawn_y)
+
+        # 設定預設平台（hack 模式下可能沒有平台檢查）
+        new_monster.home_platform = None
+
+        # 根據波次調整怪物屬性
+        self.adjust_monster_stats(new_monster)
+
+        self.monsters.append(new_monster)
+        return new_monster
+
     def adjust_monster_stats(self, monster):
         """
         根據當前波次調整怪物屬性\n
@@ -226,14 +280,13 @@ class MonsterManager:
         """
         self.spawn_timer += dt
 
-        # 每10秒嘗試生成3隻怪物
+        # 每3秒生成一隻怪物
         if self.spawn_timer >= self.spawn_interval:
             self.spawn_timer = 0
-            # 一次性生成3隻
-            for _ in range(3):
-                if len(self.monsters) < self.max_monsters:
-                    return True  # 只要還能生成就回傳True
-            return False  # 如果滿了就回傳False
+            # 每次只生成一隻怪物
+            if len(self.monsters) < self.max_monsters:
+                return True  # 可以生成新怪物
+            return False  # 如果滿了就不生成
 
         return False
 
@@ -273,8 +326,8 @@ class MonsterManager:
         回傳:\n
         bool: True 表示應該生成Boss\n
         """
-        # Boss必須等玩家擊敗10個小怪後才能出現
-        if self.monsters_killed < 10:
+        # Boss必須等玩家擊敗20個小怪後才能出現
+        if self.monsters_killed < 20:
             return False
 
         # 第一階段：岩漿Boss

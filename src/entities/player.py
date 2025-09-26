@@ -169,6 +169,9 @@ class Player(GameObject):
         self.melee_animation_duration = 1.2  # 甩槍動畫持續時間（1.2秒）
         self.weapon_swing_angle = 0  # 武器甩動角度
 
+        # hack 模式 - 作弊功能開關
+        self.hack_mode = False
+
         # 飛槍動畫系統 - 武器飛離玩家轉圈再回來
         self.weapon_flying = False  # 武器是否在飛行中
         self.weapon_fly_distance = 0  # 武器飛離玩家的距離
@@ -341,23 +344,38 @@ class Player(GameObject):
         current_time = time.time()
         weapon_config = self.weapon_configs[self.current_weapon]
 
-        # 檢查射擊冷卻時間
-        if current_time - self.last_shot_time < weapon_config["fire_rate"]:
-            return None  # 還在冷卻中，無法射擊
+        # 檢查射擊冷卻時間 - hack 模式下狙擊槍無冷卻
+        if not (self.hack_mode and self.current_weapon == "sniper"):
+            if current_time - self.last_shot_time < weapon_config["fire_rate"]:
+                return None  # 還在冷卻中，無法射擊
 
-        # 獲取滑鼠位置來決定射擊方向
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-
-        # 將滑鼠的螢幕座標轉換為世界座標
-        world_mouse_x = mouse_x + camera_x
-        world_mouse_y = mouse_y + camera_y
-
-        # 計算從玩家中心到滑鼠世界位置的方向向量
+        # 獲取目標位置來決定射擊方向
         player_center_x = self.x + self.width // 2
         player_center_y = self.y + self.height // 2
 
-        direction_x = world_mouse_x - player_center_x
-        direction_y = world_mouse_y - player_center_y
+        # hack 模式下機關槍自動追蹤最近的怪物
+        if self.hack_mode and self.current_weapon == "machine_gun":
+            target_x, target_y = self.find_nearest_monster_position()
+            if target_x is not None and target_y is not None:
+                direction_x = target_x - player_center_x
+                direction_y = target_y - player_center_y
+            else:
+                # 沒有怪物時向滑鼠方向射擊
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+                world_mouse_x = mouse_x + camera_x
+                world_mouse_y = mouse_y + camera_y
+                direction_x = world_mouse_x - player_center_x
+                direction_y = world_mouse_y - player_center_y
+        else:
+            # 正常模式：獲取滑鼠位置來決定射擊方向
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+
+            # 將滑鼠的螢幕座標轉換為世界座標
+            world_mouse_x = mouse_x + camera_x
+            world_mouse_y = mouse_y + camera_y
+
+            direction_x = world_mouse_x - player_center_x
+            direction_y = world_mouse_y - player_center_y
 
         # 正規化方向向量（讓長度變成1）
         distance = math.sqrt(direction_x**2 + direction_y**2)
@@ -452,7 +470,7 @@ class Player(GameObject):
         1. 拋物線飛行軌跡\n
         2. 可黏附在任何物體上\n
         3. 使用狙擊槍相同的準心系統\n
-        4. 玩家最多只能有5顆\n
+        4. 玩家最多只能有10顆\n
         \n
         參數:\n
         camera_x (int): 攝影機 x 偏移，用於正確計算滑鼠世界座標\n
@@ -792,6 +810,56 @@ class Player(GameObject):
 
         return muzzle_x, muzzle_y
 
+    def find_nearest_monster_position(self):
+        """
+        尋找最近的怪物位置 - hack 模式下機關槍自動追蹤用\n
+        \n
+        回傳:\n
+        tuple: (目標x座標, 目標y座標) 或 (None, None) 如果沒有怪物\n
+        """
+        if not hasattr(self, "monster_list") or not self.monster_list:
+            return None, None
+
+        closest_monster = None
+        closest_distance = float("inf")
+
+        player_center_x = self.x + self.width // 2
+        player_center_y = self.y + self.height // 2
+
+        for monster in self.monster_list:
+            if hasattr(monster, "x") and hasattr(monster, "y"):
+                monster_center_x = monster.x + getattr(monster, "width", 0) // 2
+                monster_center_y = monster.y + getattr(monster, "height", 0) // 2
+
+                distance = math.sqrt(
+                    (monster_center_x - player_center_x) ** 2
+                    + (monster_center_y - player_center_y) ** 2
+                )
+
+                if distance < closest_distance:
+                    closest_distance = distance
+                    closest_monster = monster
+
+        if closest_monster:
+            monster_center_x = (
+                closest_monster.x + getattr(closest_monster, "width", 0) // 2
+            )
+            monster_center_y = (
+                closest_monster.y + getattr(closest_monster, "height", 0) // 2
+            )
+            return monster_center_x, monster_center_y
+
+        return None, None
+
+    def set_monster_list(self, monster_list):
+        """
+        設定怪物列表 - 用於 hack 模式的自動追蹤\n
+        \n
+        參數:\n
+        monster_list (list): 當前活躍的怪物列表\n
+        """
+        self.monster_list = monster_list
+
     def melee_attack(self):
         """
         甩槍攻擊 - 用槍械進行高威力的近距離攻擊\n
@@ -885,9 +953,10 @@ class Player(GameObject):
         """
         current_time = time.time()
 
-        # 檢查冷卻時間
-        if current_time - self.last_ultimate_time < self.ultimate_cooldown:
-            return None  # 還在冷卻中
+        # 檢查冷卻時間 - hack 模式下無冷卻
+        if not self.hack_mode:
+            if current_time - self.last_ultimate_time < self.ultimate_cooldown:
+                return None  # 還在冷卻中
 
         self.last_ultimate_time = current_time
 
@@ -1175,6 +1244,10 @@ class Player(GameObject):
             'game_over': bool - 是否遊戲結束（沒有生命次數）\n
         }\n
         """
+        # hack 模式下玩家擁有無限血量，不會受到任何傷害
+        if self.hack_mode:
+            return {"health_lost": False, "died": False, "game_over": False}
+        
         self.health -= damage
         result = {"health_lost": True, "died": False, "game_over": False}
 

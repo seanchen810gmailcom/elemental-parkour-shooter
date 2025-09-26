@@ -116,7 +116,7 @@ GRENADE_COLOR = (50, 150, 50)  # 深綠色
 GRENADE_SPEED = 10  # 手榴彈飛行速度
 GRENADE_DAMAGE = 200  # 爆炸傷害
 GRENADE_EXPLOSION_RADIUS = 400  # 4公分爆炸範圍（以像素為單位，實際遊戲中需要更大範圍）
-GRENADE_MAX_COUNT = 5  # 玩家最大手榴彈數量
+GRENADE_MAX_COUNT = 10  # 玩家最大手榴彈數量（從5增加到10）
 GRENADE_GRAVITY = 0.3  # 手榴彈重力影響（讓拋物線更真實）
 
 # 爆炸視覺效果設定
